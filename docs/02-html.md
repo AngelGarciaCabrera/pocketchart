@@ -10,7 +10,7 @@ Al final del `<body>` o en el `<head>`:
 
 ```html
 <script src="pocketchart.min.js"></script>
-<!-- o desde el CDN: https://cdn.jsdelivr.net/gh/AngelGarciaCabrera/pocketchart@v0.3.0/dist/pocketchart.min.js -->
+<!-- o desde el CDN: https://cdn.jsdelivr.net/gh/AngelGarciaCabrera/pocketchart@v0.5.0/dist/pocketchart.min.js -->
 ```
 
 Esto registra automáticamente la etiqueta `<pocket-chart>`.
@@ -45,6 +45,8 @@ Todo lo que acepta `PocketChart.create()` puede ir dentro del JSON (colores, ani
 | `theme` | `dark` | `auto`, `light` o `dark` |
 | `lang` | `es` | Idioma de los textos de la interfaz |
 | `legend-mode` | `single` | Una serie a la vez |
+| `export` | `png pdf xlsx` | Formatos del botón de descarga; `false` lo oculta |
+| `stack` | `percent` | Apila las series (sin valor) o al 100 % (`percent`) |
 | `animation` | `wave` | Animación de entrada |
 | `easing` | `back` | Curva de tiempo |
 | `duration` | `900` | Duración en ms |
@@ -97,6 +99,8 @@ O asígnalos después desde JavaScript:
 </script>
 ```
 
-Eventos: `inspect`, `zoom`, `toggle`, `ready`, `updated`, `error`.
+Eventos: `inspect`, `zoom`, `toggle`, `ready`, `updated`, `error`, `export`.
+
+Para descargar desde tu propio botón: `document.querySelector('pocket-chart').chart.export('pdf')`.
 
 Ejemplo completo: [`examples/html.html`](../examples/html.html).

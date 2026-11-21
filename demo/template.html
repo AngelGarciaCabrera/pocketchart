@@ -108,6 +108,9 @@ h2:first-child{margin-top:4px}
         <article class="card"><div id="c-energy"></div><p class="desc" hidden>8.760 lecturas. Pellizca para acercar y usa el mini-mapa.</p></article>
         <article class="card"><div id="c-big"></div><p class="desc" hidden>200.000 puntos con zoom fluido.</p></article>
         <article class="card"><div id="c-bars"></div><p class="desc" hidden>Toca un mes para comparar ambos años.</p></article>
+        <article class="card"><div id="c-stack"></div><p class="desc" hidden>Barras apiladas: toca un mes para ver cada parte y el total.</p></article>
+        <article class="card"><div id="c-stack-area"></div><p class="desc" hidden>Áreas apiladas: oculta una fuente en la leyenda y el resto se recoloca.</p></article>
+        <article class="card"><div id="c-stack-pct"></div><p class="desc" hidden>Apilado al 100 %: compara el reparto, no el total.</p></article>
         <article class="card"><div id="c-scatter"></div><p class="desc" hidden>Toca cerca de un punto: se elige el más próximo.</p></article>
         <article class="card"><div id="c-donut"></div><p class="desc" hidden>Toca una porción o un chip para ver su valor.</p></article>
       </div>
@@ -131,6 +134,8 @@ h2:first-child{margin-top:4px}
           <div class="r"><label for="o-theme">Tema</label><select id="o-theme">
             <option value="auto">Automático</option><option value="light">Claro</option><option value="dark">Oscuro</option>
             <option value="midnight">Medianoche</option><option value="paper">Papel</option></select></div>
+          <div class="r"><label for="o-stack">Apilado</label><select id="o-stack">
+            <option value="none">No</option><option value="true">Apiladas</option><option value="percent">Al 100 %</option></select></div>
         </div></details>
 
         <details class="group" open><summary>Animación de entrada</summary><div class="rows">
@@ -203,7 +208,21 @@ chart.on('inspect', (sel) =&gt; console.log(sel));</pre></div>
 <script>/*LIB*/</script>
 <script>
 (function () {
-  const PC = window.PocketChart;
+  const PC0 = window.PocketChart;
+  // Dentro del visor de claude.ai las descargas pasan por su permiso de "downloads";
+  // abierta como archivo normal, se descarga como siempre.
+  let dlCap;
+  const saveFile = async (blob, filename) => {
+    if (window.claude && window.claude.use) {
+      dlCap = dlCap || window.claude.use('downloads');
+      const d = await dlCap;
+      if (d) { try { await d.save({ filename, data: blob }); } catch (e) { if (e && e.code !== 'declined') console.warn('Descarga:', e.code); } return; }
+    }
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  };
+  const PC = { ...PC0, create: (el, o = {}) => PC0.create(el, { ...o, export: o.export === false ? false : { ...(o.export || {}), onExport: saveFile } }) };
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
   const noise = (a) => (rnd() - 0.5) * 2 * a;
@@ -254,6 +273,8 @@ chart.on('inspect', (sel) =&gt; console.log(sel));</pre></div>
       grid: { show: $('o-grid').value !== 'none', dashed: $('o-grid').value === 'dashed' },
       donut: { thickness: +$('o-thick').value },
     };
+    const stk = $('o-stack').value;
+    if (stk !== 'none' && (type === 'line' || type === 'area' || type === 'bar')) cfg.stack = stk === 'percent' ? 'percent' : true;
     if (type === 'scatter') { cfg.x = { type: 'linear' }; cfg.y = { zero: false }; }
     else if (type !== 'donut' && type !== 'pie') cfg.categories = meses;
     if (type === 'donut' || type === 'pie') cfg.y = { format: (v) => '$' + v.toLocaleString('es') };
@@ -389,6 +410,38 @@ chart.on('inspect', (sel) =&gt; console.log(sel));</pre></div>
     series: [
       { name: '2025', data: meses.map((_, i) => Math.round(40 + 18 * Math.sin(i / 2) + rnd() * 10)) },
       { name: '2026', data: meses.map((_, i) => (i < 11 ? Math.round(48 + 20 * Math.sin(i / 2 + 0.3) + rnd() * 12) : null)) },
+    ],
+  }, 'pulse');
+
+  // 3b) Barras apiladas
+  demo('#c-stack', {
+    type: 'bar', stack: true, animation: { enter: 'grow', easing: 'back', duration: 800 }, title: 'Ventas por canal', subtitle: 'Miles de USD', lang: 'es', categories: meses,
+    series: [
+      { name: 'Tienda', data: meses.map((_, i) => Math.round(22 + 8 * Math.sin(i / 2) + rnd() * 6)) },
+      { name: 'Online', data: meses.map((_, i) => Math.round(12 + i * 1.6 + rnd() * 6)) },
+      { name: 'Mayoristas', data: meses.map(() => Math.round(8 + rnd() * 8)) },
+    ],
+  }, 'skeleton');
+
+  // 3c) Áreas apiladas
+  const days = Array.from({ length: 30 }, (_, i) => new Date(2026, 10, i + 1).getTime());
+  demo('#c-stack-area', {
+    type: 'area', stack: true, animation: { enter: 'wave', duration: 800 }, title: 'Energía por fuente', subtitle: 'Noviembre · MWh por día', lang: 'es',
+    series: [
+      { name: 'Solar', unit: 'MWh', data: days.map((t, i) => [t, Math.round(40 + 18 * Math.sin(i / 3) + rnd() * 10)]) },
+      { name: 'Eólica', unit: 'MWh', data: days.map((t, i) => [t, Math.round(30 + 14 * Math.cos(i / 4) + rnd() * 10)]) },
+      { name: 'Red', unit: 'MWh', data: days.map(() => Math.round(25 + rnd() * 12)).map((v, i) => [days[i], v]) },
+    ],
+  }, 'wave');
+
+  // 3d) Apilado al 100 %
+  const tri = ['T1', 'T2', 'T3', 'T4'];
+  demo('#c-stack-pct', {
+    type: 'bar', stack: 'percent', animation: { enter: 'wave', duration: 700 }, title: 'Reparto de tickets', subtitle: 'Por prioridad y trimestre', lang: 'es', categories: tri,
+    series: [
+      { name: 'Alta', data: tri.map(() => Math.round(10 + rnd() * 15)) },
+      { name: 'Media', data: tri.map(() => Math.round(30 + rnd() * 20)) },
+      { name: 'Baja', data: tri.map(() => Math.round(25 + rnd() * 30)) },
     ],
   }, 'pulse');
 

@@ -23,6 +23,7 @@ const EVENTS = {
   onUpdated: 'updated',
   onError: 'error',
   onVisible: 'visible',
+  onExport: 'export',
 };
 
 // Clave estable de las opciones: las funciones (formatos) no cambian la clave,

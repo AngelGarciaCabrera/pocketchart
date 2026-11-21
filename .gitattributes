@@ -1,0 +1,6 @@
+# Finales de línea LF en todos los sistemas (evita los avisos "LF will be replaced by CRLF" en Windows)
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary
+*.xlsx binary

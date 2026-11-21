@@ -32,6 +32,8 @@ export interface Series {
   fillOpacity?: number;
   markers?: MarkerOptions;
   radius?: number;
+  /** Grupo de apilado: `true` usa el grupo común, un texto crea un grupo propio, `false` la excluye. */
+  stack?: boolean | string;
   format?: (value: number, series: Series) => string;
 }
 
@@ -39,6 +41,24 @@ export interface StyleOptions {
   bg?: string; fg?: string; muted?: string; grid?: string; axis?: string;
   chip?: string; chipOn?: string; tip?: string; line?: string; font?: string; radius?: number | string;
 }
+
+export type ExportFormat = 'png' | 'pdf' | 'xlsx' | 'csv';
+export interface ExportOptions {
+  /** Botón de descarga en la cabecera (por defecto true). */
+  button?: boolean;
+  /** Formatos del menú (por defecto png, pdf y xlsx). */
+  formats?: ExportFormat[];
+  /** Nombre del archivo sin extensión (por defecto, el título). */
+  filename?: string | null;
+  /** Resolución de la imagen (por defecto 3). */
+  scale?: number;
+  /** Fondo de la imagen (por defecto, el del tema). */
+  background?: string | null;
+  pdf?: { page?: 'a4' | 'letter' | 'fit'; orientation?: 'auto' | 'portrait' | 'landscape'; margin?: number };
+  /** Sustituye a la descarga del navegador (por ejemplo, para subir el archivo o usarlo en una WebView). */
+  onExport?: ((blob: Blob, filename: string, format: ExportFormat) => void | Promise<void>) | null;
+}
+export interface ExportResult { blob: Blob; filename: string; format: ExportFormat }
 
 export interface PocketChartOptions {
   type?: ChartType;
@@ -50,6 +70,8 @@ export interface PocketChartOptions {
   x?: { type?: 'auto' | 'time' | 'linear' | 'category'; format?: (v: number, mode: 'tick' | 'full') => string };
   y?: { min?: number | null; max?: number | null; zero?: boolean | null; format?: (v: number) => string };
   smooth?: boolean;
+  /** Apila barras, áreas y líneas: `true` suma los valores, `'percent'` los reparte al 100 %. */
+  stack?: boolean | 'percent';
   legend?: { show?: 'auto' | boolean; mode?: 'multi' | 'single' };
   zoom?: boolean;
   pan?: boolean;
@@ -80,6 +102,8 @@ export interface PocketChartOptions {
   grid?: { show?: boolean; dashed?: boolean };
   axis?: { x?: boolean; y?: boolean };
   donut?: { thickness?: number };
+  /** Exportar a PNG, PDF, Excel o CSV. `false` oculta el botón. */
+  export?: boolean | ExportOptions;
 }
 
 export interface InspectEvent {
@@ -96,6 +120,7 @@ export interface ChartEvents {
   updated: undefined;
   visible: boolean;
   error: unknown;
+  export: { format: ExportFormat; filename: string; size: number };
 }
 
 export declare class PocketChart {
@@ -112,6 +137,10 @@ export declare class PocketChart {
   resetZoom(): void;
   setSeriesVisible(key: string, visible: boolean): void;
   toggleFullscreen(force?: boolean): void;
+  /** Genera el archivo y lo descarga (o lo pasa a `export.onExport`). Con `{ download: false }` sólo lo devuelve. */
+  export(format?: ExportFormat, opts?: ExportOptions & { download?: boolean }): Promise<ExportResult>;
+  /** Genera el archivo sin descargarlo. */
+  toBlob(format?: ExportFormat, opts?: ExportOptions): Promise<Blob>;
   invalidate(): void;
   destroy(): void;
 }

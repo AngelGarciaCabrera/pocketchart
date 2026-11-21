@@ -12,6 +12,10 @@
  *   />
  *
  * El alto se ajusta solo al contenido (cabecera + leyenda + gráfico).
+ *
+ * Exportar (PNG, PDF, Excel): pasa `onExport` y recibirás { filename, format, mime, base64 }
+ * para guardarlo o compartirlo (por ejemplo con expo-file-system y expo-sharing).
+ * Sin `onExport`, el botón de descarga se oculta: dentro de una WebView no hay descargas.
  */
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
@@ -39,13 +43,24 @@ const html = (bg) => `<!doctype html><html><head><meta charset="utf-8">
   window.__pc = function(msg){
     msg = reviveFns(msg);
     if (msg.type === 'init') {
+      if (msg.exportBridge && msg.options.export !== false) {
+        // Dentro de la WebView no hay descargas: el archivo se envía a React Native en base64.
+        msg.options.export = Object.assign({}, msg.options.export || {}, { onExport: function(blob, filename, format){
+          var r = new FileReader();
+          r.onload = function(){ var u = String(r.result); send('export', { filename: filename, format: format, mime: blob.type, base64: u.slice(u.indexOf(',') + 1) }); };
+          r.readAsDataURL(blob);
+        } });
+      } else if (!msg.exportBridge) msg.options.export = false;
       chart = PocketChart.create('#c', msg.options);
       ['inspect','zoom','toggle','ready','updated','error'].forEach(function(e){ chart.on(e, function(d){ send(e, d); }); });
     } else if (chart) {
       if (msg.type === 'update') chart.update(msg.options);
       else if (msg.type === 'setData') chart.setData(msg.series);
       else if (msg.type === 'setLoading') chart.setLoading(msg.on, msg.opts || {});
-      else if (msg.type === 'call' && typeof chart[msg.method] === 'function') chart[msg.method].apply(chart, msg.args || []);
+      else if (msg.type === 'call' && typeof chart[msg.method] === 'function') {
+        var res = chart[msg.method].apply(chart, msg.args || []);
+        if (res && typeof res.catch === 'function') res.catch(function(err){ send('error', String(err && err.message || err)); });
+      }
     }
   };
   new ResizeObserver(function(){
@@ -60,13 +75,13 @@ const html = (bg) => `<!doctype html><html><head><meta charset="utf-8">
 const serialize = (o) => JSON.stringify(o, (k, v) => (typeof v === 'function' ? 'fn:' + v.toString() : v));
 
 export const PocketChartView = forwardRef(function PocketChartView(
-  { options = {}, series, loading = false, background = 'transparent', style, onInspect, onZoom, onToggle, onReady, onUpdated, onError },
+  { options = {}, series, loading = false, background = 'transparent', style, onInspect, onZoom, onToggle, onReady, onUpdated, onError, onExport },
   ref
 ) {
   const web = useRef(null);
   const [height, setHeight] = useState((options.height || 260) + 80);
   const [ready, setReady] = useState(false);
-  const handlers = { inspect: onInspect, zoom: onZoom, toggle: onToggle, ready: onReady, updated: onUpdated, error: onError };
+  const handlers = { inspect: onInspect, zoom: onZoom, toggle: onToggle, ready: onReady, updated: onUpdated, error: onError, export: onExport };
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
@@ -93,13 +108,15 @@ export const PocketChartView = forwardRef(function PocketChartView(
     replay: () => post({ type: 'call', method: 'replay' }),
     setLoading: (on, opts) => post({ type: 'setLoading', on, opts }),
     call: (method, ...args) => post({ type: 'call', method, args }),
+    // El archivo llega a la prop onExport: ref.current.export('pdf')
+    export: (format = 'png', opts) => post({ type: 'call', method: 'export', args: [format, opts || {}] }),
   }), [post]);
 
   const onMessage = useCallback((e) => {
     let msg; try { msg = JSON.parse(e.nativeEvent.data); } catch (_) { return; }
     if (msg.type === 'loaded') {
       // En una WebView la pantalla completa del navegador no existe: por defecto se oculta el botón.
-      post({ type: 'init', options: { fullscreen: false, ...options, series: series || [], loading } });
+      post({ type: 'init', exportBridge: !!handlersRef.current.export, options: { fullscreen: false, ...options, series: series || [], loading } });
       setReady(true);
     } else if (msg.type === 'size') setHeight(msg.data);
     else handlersRef.current[msg.type]?.(msg.data);

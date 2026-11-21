@@ -56,9 +56,9 @@ export default function Ventas() {
 | `loading` | `boolean` | Muestra la animación de carga. Al pasar a `false`, se dibuja con su entrada. |
 | `options` | `object` | Cualquier opción de la [referencia](07-referencia.md). |
 | `type`, `title`, `subtitle`, `height`, `theme`, `categories`… | | Atajos: cualquier opción se puede pasar también como prop suelta. |
-| `onInspect`, `onZoom`, `onToggle`, `onReady`, `onUpdated`, `onError`, `onVisible` | `función` | Eventos |
+| `onInspect`, `onZoom`, `onToggle`, `onReady`, `onUpdated`, `onError`, `onVisible`, `onExport` | `función` | Eventos |
 | `className`, `style` | | Para el contenedor |
-| `ref` | | Da acceso a la instancia: `ref.current.resetZoom()`, `.replay()`, `.toggleFullscreen()` |
+| `ref` | | Da acceso a la instancia: `ref.current.resetZoom()`, `.replay()`, `.toggleFullscreen()`, `.export('png' \| 'pdf' \| 'xlsx')` |
 
 El componente compara las opciones por su contenido. Escribir `options={{...}}` en línea no redibuja el gráfico en cada render.
 
@@ -70,6 +70,8 @@ const chartRef = useRef(null);
 <PocketChart ref={chartRef} type="line" series={series} />
 <button onClick={() => chartRef.current.resetZoom()}>Ver todo</button>
 <button onClick={() => chartRef.current.replay()}>Repetir animación</button>
+<button onClick={() => chartRef.current.export('pdf')}>Descargar PDF</button>
+<button onClick={() => chartRef.current.export('xlsx')}>Descargar Excel</button>
 ```
 
 ## Next.js

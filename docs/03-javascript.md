@@ -83,7 +83,20 @@ socket.on('lectura', ({ t, valor }) => {
 
 Con series grandes (más de 4.096 puntos) la librería crea sola un índice de mínimos y máximos. Puede dibujar 200.000 puntos con fluidez.
 
-## Paso 5. Formatos propios
+## Paso 5. Exportar a PNG, PDF o Excel
+
+El botón de descarga ya viene en la cabecera. También puedes exportar desde tu código:
+
+```js
+await chart.export('png');    // imagen
+await chart.export('pdf');    // documento A4
+await chart.export('xlsx');   // Excel con los datos
+const { blob } = await chart.export('xlsx', { download: false }); // sólo el archivo
+```
+
+Opciones (formatos, nombre, resolución, tamaño de página) en la [referencia](07-referencia.md#exportar-png-pdf-excel).
+
+## Paso 6. Formatos propios
 
 ```js
 create('#grafico', {

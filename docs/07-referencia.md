@@ -173,7 +173,9 @@ PocketChart.create('#grafico', {
 | Opción | Por defecto | Descripción |
 |---|---|---|
 | `type` | `'line'` | `line`, `area`, `bar`, `scatter`, `pie`, `donut`. Cada serie puede tener su propio `type` (mixtos) |
-| `series` | `[]` | `{ name, data, unit?, color?, type?, smooth?, format? }` |
+| `series` | `[]` | `{ name, data, unit?, color?, type?, smooth?, stack?, format? }` |
+| `export` | ver *Exportar* | Botón de descarga y formatos (PNG, PDF, Excel, CSV). `false` lo oculta |
+| `stack` | `false` | `true` apila barras, áreas y líneas; `'percent'` las apila al 100 %. Ver *Apilado* |
 | `data` | | `[y, ...]`, `[[x, y], ...]` o `[{ x, y }]` / `[{ label, value }]`. `x` puede ser `Date`, ISO, epoch ms, número o texto |
 | `categories` | `null` | Etiquetas del eje X para datos `[y, ...]` |
 | `title`, `subtitle` | `''` | Cabecera |
@@ -195,6 +197,64 @@ PocketChart.create('#grafico', {
 | `lang` | `'auto'` | `es`, `en` para textos de la interfaz |
 | `locale` | navegador | Formato de fechas y números |
 | `tooltip.format(sel)` | | Devuelve HTML propio para el tooltip |
+
+## Exportar (PNG, PDF, Excel)
+
+Cada gráfico trae un botón de descarga en la cabecera con tres opciones: **Imagen (PNG)**, **Documento PDF** y **Excel (.xlsx)**. No necesita librerías extra: la imagen se dibuja en el navegador y el PDF y el Excel se generan en el propio archivo de PocketChart.
+
+- **PNG:** título, subtítulo, leyenda y gráfico, sin tooltip y con la animación terminada, a resolución ×3.
+- **PDF:** la misma imagen en una página A4 (horizontal si el gráfico es ancho), lista para imprimir.
+- **Excel:** un `.xlsx` real con una columna por serie. Las fechas son fechas de Excel, los números son números (no texto) y la primera fila queda fija. En gráficos apilados se exportan los valores reales, no los acumulados.
+- **CSV:** disponible añadiéndolo a `formats` o con `chart.export('csv')`.
+
+```js
+create('#ventas', {
+  export: {
+    formats: ['png', 'pdf', 'xlsx', 'csv'], // los que salen en el menú
+    filename: 'ventas-2026',               // sin extensión (por defecto, el título)
+    scale: 3,                              // resolución de la imagen
+    background: '#ffffff',                 // fondo de la imagen (por defecto, el del tema)
+    pdf: { page: 'a4', orientation: 'auto', margin: 28 }, // page: a4 | letter | fit
+  },
+});
+
+// Desde tu propio botón
+await chart.export('pdf');
+await chart.export('xlsx', { filename: 'reporte-noviembre' });
+
+// Sólo el archivo, sin descargar (por ejemplo, para subirlo a tu API)
+const { blob } = await chart.export('png', { download: false });
+const blob2 = await chart.toBlob('xlsx');
+
+// Hacer otra cosa en lugar de descargar
+create('#ventas', { export: { onExport: (blob, nombre, formato) => subir(blob, nombre) } });
+
+// Sin botón
+create('#ventas', { export: false });
+```
+
+El evento `export` avisa cada vez que se genera un archivo: `{ format, filename, size }`.
+
+## Apilado
+
+```js
+// Barras apiladas: cada mes muestra las partes y el total
+create('#ventas', { type: 'bar', stack: true, categories: meses, series: [tienda, online, mayoristas] });
+
+// Áreas apiladas
+create('#energia', { type: 'area', stack: true, series: [solar, eolica, red] });
+
+// Al 100 %: compara el reparto, no el total
+create('#tickets', { type: 'bar', stack: 'percent', categories: ['T1', 'T2', 'T3', 'T4'], series: [alta, media, baja] });
+```
+
+- Funciona con `bar`, `area` y `line`. Las series de distinto tipo no se apilan entre sí.
+- **Grupos:** con `stack: 'a'` y `stack: 'b'` en cada serie tienes dos columnas apiladas, una al lado de otra.
+- **Excluir una serie:** `stack: false` en la serie (por ejemplo, una línea de meta encima de las barras).
+- Los valores negativos se apilan hacia abajo, por separado de los positivos.
+- El tooltip muestra la capa de arriba primero, el **Total** y, al 100 %, el porcentaje de cada parte. El evento `inspect` devuelve los valores reales, no los acumulados.
+- Al ocultar una serie desde la leyenda, las demás se recolocan con una transición.
+- En HTML: `<pocket-chart type="bar" stack>` o `stack="percent"`.
 
 ## Personalizar el estilo
 

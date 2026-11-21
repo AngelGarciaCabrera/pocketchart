@@ -1,5 +1,17 @@
 # Cambios
 
+## 0.5.0 — 2026-11-21
+- Exportar: botón de descarga en la cabecera con **PNG**, **PDF** y **Excel (.xlsx)**, y CSV opcional. Todo sin dependencias.
+- API `chart.export(formato, opciones)` y `chart.toBlob(formato)`, opción `export` (formatos, nombre, resolución, página del PDF, `onExport`) y evento `export`.
+- React Native: prop `onExport` (el archivo llega en base64) y `ref.current.export('pdf')`.
+- Atributo `export` en `<pocket-chart>`.
+
+## 0.4.0 — 2026-11-21
+- Gráficos apilados: `stack: true` (barras, áreas y líneas) y `stack: 'percent'` (al 100 %).
+- Grupos de apilado por serie (`stack: 'a'`), series excluidas (`stack: false`) y negativos hacia abajo.
+- Tooltip con total y porcentaje de cada parte; transición al ocultar una serie apilada.
+- Atributo `stack` en `<pocket-chart>` y tres ejemplos nuevos en la demo.
+
 ## 0.3.0 — 2026-11-21
 - Rendimiento: pirámide min/máx para series grandes (200.000 puntos a ~2,4 ms por fotograma en un móvil lento simulado), un solo bucle de fotogramas, cachés de texto, ejes y mini-mapa, tooltip movido con `transform`, `maxPixelRatio`.
 - Las animaciones de entrada empiezan cuando el gráfico aparece en pantalla (`animation.onVisible`, `replayOnView`).

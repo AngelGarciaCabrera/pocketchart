@@ -16,6 +16,7 @@ const PALETTE = {
 const I18N = {
   en: {
     reset: 'Reset zoom', fullscreen: 'Fullscreen', exit: 'Close',
+    download: 'Download', category: 'Category', date: 'Date', png: 'Image (PNG)', pdf: 'PDF document', xlsx: 'Excel (.xlsx)', csv: 'CSV',
     hintTouch: 'Pinch to zoom · Touch and hold to inspect',
     hintMouse: 'Scroll with Ctrl to zoom · Drag to inspect',
     rotate: 'Rotate your phone for more room', total: 'Total', chart: 'Chart',
@@ -23,6 +24,7 @@ const I18N = {
   },
   es: {
     reset: 'Restablecer zoom', fullscreen: 'Pantalla completa', exit: 'Cerrar',
+    download: 'Descargar', category: 'Categoría', date: 'Fecha', png: 'Imagen (PNG)', pdf: 'Documento PDF', xlsx: 'Excel (.xlsx)', csv: 'CSV',
     hintTouch: 'Pellizca para hacer zoom · Mantén pulsado para inspeccionar',
     hintMouse: 'Ctrl + rueda para zoom · Arrastra para inspeccionar',
     rotate: 'Gira el teléfono para ver más', total: 'Total', chart: 'Gráfico',
@@ -40,6 +42,7 @@ const DEFAULTS = {
   x: { type: 'auto', format: null, label: '' },   // auto | time | linear | category
   y: { min: null, max: null, zero: null, format: null, label: '' },
   smooth: true,
+  stack: false,            // false | true (apiladas) | 'percent' (100 %). Cada serie puede usar `stack: 'grupo'` o `stack: false`
   legend: { show: 'auto', mode: 'multi' },        // mode: multi (varias a la vez) | single (una a la vez)
   zoom: true,
   pan: true,
@@ -52,6 +55,16 @@ const DEFAULTS = {
   locale: null,            // para fechas y números (por defecto, el del navegador)
   hint: true,
   tooltip: { format: null },
+  /* --- Exportar --- */
+  export: {
+    button: true,          // botón de descarga en la cabecera
+    formats: ['png', 'pdf', 'xlsx'], // también 'csv'
+    filename: null,        // por defecto, el título del gráfico
+    scale: 3,              // resolución de la imagen (3 = nítida al imprimir)
+    background: null,      // color de fondo de la imagen (por defecto, el del tema)
+    pdf: { page: 'a4', margin: 28 }, // page: a4 | letter | fit (página del tamaño del gráfico)
+    onExport: null,        // función(blob, nombre, formato): sustituye a la descarga (útil en WebView)
+  },
   maxPixelRatio: 2,        // límite de resolución del lienzo: 2 se ve nítido y dibuja ~2,25× menos píxeles que 3
 
   /* --- Animación --- */
@@ -123,7 +136,12 @@ font-size:14px;line-height:1.35;-webkit-tap-highlight-color:transparent;border-r
 --pc-shadow:0 8px 24px rgba(0,0,0,.45),0 1px 2px rgba(0,0,0,.3);
 ${PALETTE.dark.map((c, i) => `--pc-c${i + 1}:var(--pocket-c${i + 1}-dark,${c});`).join('')}color-scheme:dark}
 .pc-root *{box-sizing:border-box}
-.pc-head{display:flex;align-items:center;gap:8px;padding:0 0 10px}
+.pc-head{display:flex;align-items:center;gap:8px;padding:0 0 10px;position:relative}
+.pc-menu{position:absolute;right:0;top:40px;z-index:5;min-width:170px;background:var(--pc-tip);color:var(--pc-fg);border:1px solid var(--pc-line);border-radius:12px;box-shadow:var(--pc-shadow);padding:5px;display:flex;flex-direction:column}
+.pc-menu[hidden]{display:none}
+.pc-menu button{appearance:none;border:0;background:transparent;color:inherit;font:inherit;font-size:13.5px;text-align:left;padding:0 12px;height:40px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pc-menu button:hover,.pc-menu button:focus-visible{background:var(--pc-chip);outline:none}
+.pc-menu small{color:var(--pc-muted);font-size:11.5px;letter-spacing:.02em}
 .pc-titles{flex:1;min-width:0}
 .pc-title{font-size:15px;font-weight:600;margin:0;letter-spacing:-.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pc-sub{font-size:12.5px;color:var(--pc-muted);margin:1px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -155,6 +173,7 @@ will-change:transform,opacity;contain:layout style}
 .pc-tip-h{font-weight:500;font-size:11.5px;color:var(--pc-muted);margin-bottom:3px;white-space:nowrap}
 .pc-tip-r{display:flex;align-items:center;gap:7px;white-space:nowrap;padding:1px 0}
 .pc-tip-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--pc-muted)}
+.pc-tip-t{border-top:1px solid var(--pc-grid);margin-top:3px;padding-top:4px}
 .pc-tip-v{font-weight:600;font-variant-numeric:tabular-nums}
 .pc-hint{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);background:var(--pc-fg);color:var(--pc-bg);font-size:11.5px;font-weight:500;
 padding:5px 10px;border-radius:8px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .4s;max-width:92%;overflow:hidden;text-overflow:ellipsis}
@@ -174,6 +193,7 @@ padding:max(12px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) 
 const ICONS = {
   expand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
   reset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
 };
 
@@ -191,6 +211,89 @@ function merge(base, extra) {
   }
   return out;
 }
+/* ------------------------------------------------------------------ */
+/* Exportar: ZIP (para .xlsx) y PDF sin dependencias                   */
+/* ------------------------------------------------------------------ */
+const enc = (str) => new TextEncoder().encode(str);
+let CRC_T;
+function crc32(b) {
+  if (!CRC_T) { CRC_T = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; CRC_T[n] = c >>> 0; } }
+  let c = 0xffffffff;
+  for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 255] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+/** ZIP sin compresión (suficiente para un .xlsx; Excel lo abre sin problema). */
+function zipStore(files) {
+  const parts = [], central = []; let off = 0;
+  const u16 = (v) => [v & 255, (v >>> 8) & 255], u32 = (v) => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
+  files.forEach(({ name, data }) => {
+    const nm = enc(name), crc = crc32(data), sz = data.length;
+    const common = [...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), ...u16(0)];
+    const local = new Uint8Array([...u32(0x04034b50), ...common]);
+    parts.push(local, nm, data);
+    central.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...common, ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nm);
+    off += local.length + nm.length + sz;
+  });
+  const csz = central.reduce((n, b) => n + b.length, 0);
+  const end = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(csz), ...u32(off), ...u16(0)]);
+  return new Blob([...parts, ...central, end], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+const xmlEsc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
+function colName(i) { let s = ''; i++; while (i) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = (i - m - 1) / 26; } return s; }
+/** Libro .xlsx con una hoja. `rows`: filas de celdas { v, t: 's' | 'n' | 'd' }. */
+function buildXlsx(sheetName, rows, widths) {
+  const sheet = rows.map((row, r) => `<row r="${r + 1}">${row.map((c, i) => {
+    if (!c || c.v == null || c.v === '') return '';
+    const ref = colName(i) + (r + 1);
+    if (c.t === 'n' || c.t === 'd') return isFinite(c.v) ? `<c r="${ref}"${c.t === 'd' ? ' s="2"' : r === 0 ? ' s="1"' : ''}><v>${c.v}</v></c>` : '';
+    return `<c r="${ref}" t="inlineStr"${r === 0 ? ' s="1"' : ''}><is><t xml:space="preserve">${xmlEsc(c.v)}</t></is></c>`;
+  }).join('')}</row>`).join('');
+  const cols = widths && widths.length ? `<cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` : '';
+  const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  const name = xmlEsc((sheetName || 'Datos').replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Datos');
+  return zipStore([
+    { name: '[Content_Types].xml', data: enc(X + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>') },
+    { name: '_rels/.rels', data: enc(X + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>') },
+    { name: 'xl/workbook.xml', data: enc(X + `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${name}" sheetId="1" r:id="rId1"/></sheets></workbook>`) },
+    { name: 'xl/_rels/workbook.xml.rels', data: enc(X + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>') },
+    { name: 'xl/styles.xml', data: enc(X + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy-mm-dd hh:mm"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>') },
+    { name: 'xl/worksheets/sheet1.xml', data: enc(X + `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols}<sheetData>${sheet}</sheetData></worksheet>`) },
+  ]);
+}
+/** PDF de una página con una imagen JPEG. */
+function buildPdf(jpeg, imgW, imgH, opt, title) {
+  const PAGES = { a4: [595.28, 841.89], letter: [612, 792] };
+  const m = opt.margin ?? 28;
+  let pw, ph;
+  if (opt.page === 'fit' || !PAGES[opt.page]) { pw = imgW + m * 2; ph = imgH + m * 2; }
+  else { [pw, ph] = PAGES[opt.page]; if (opt.orientation === 'landscape' || (opt.orientation !== 'portrait' && imgW > imgH)) [pw, ph] = [ph, pw]; }
+  const k = Math.min((pw - m * 2) / imgW, (ph - m * 2) / imgH, opt.page === 'fit' ? 1 : Infinity);
+  const w = imgW * k, h = imgH * k, x = (pw - w) / 2, y = ph - m - h;
+  const f = (n) => +n.toFixed(2);
+  const hex = (str) => 'FEFF' + Array.from(String(str)).map((ch) => { const c = ch.codePointAt(0); const u = c > 0xffff ? String.fromCharCode(0xd800 + ((c - 0x10000) >> 10), 0xdc00 + ((c - 0x10000) & 0x3ff)) : ch; return Array.from(u).map((z) => z.charCodeAt(0).toString(16).padStart(4, '0')).join(''); }).join('');
+  const content = `q ${f(w)} 0 0 ${f(h)} ${f(x)} ${f(y)} cm /Im0 Do Q`;
+  const objs = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(pw)} ${f(ph)}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>`,
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    null, // imagen (binaria)
+    `<< /Title <${hex(title || 'Chart')}> /Producer (PocketChart) >>`,
+  ];
+  const chunks = [], offs = []; let len = 0;
+  const push = (b) => { const u = typeof b === 'string' ? enc(b) : b; chunks.push(u); len += u.length; };
+  push(new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52, 10, 37, 0xe2, 0xe3, 0xcf, 0xd3, 10])); // %PDF-1.4 + bytes binarios
+  objs.forEach((o, i) => {
+    offs.push(len);
+    if (o) push(`${i + 1} 0 obj\n${o}\nendobj\n`);
+    else { push(`${i + 1} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${opt._pxW} /Height ${opt._pxH} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`); push(jpeg); push('\nendstream\nendobj\n'); }
+  });
+  const xref = len;
+  push(`xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offs.map((o) => String(o).padStart(10, '0') + ' 00000 n \n').join('')}trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  return new Blob(chunks, { type: 'application/pdf' });
+}
+const canvasBlob = (c, type, q) => new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('toBlob'))), type, q));
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const reduceMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -432,7 +535,9 @@ export class PocketChart {
     this._zoomRaf = requestAnimationFrame(step);
   }
   setSeriesVisible(key, visible) {
+    const was = new Set(this._hidden);
     if (visible) this._hidden.delete(key); else this._hidden.add(key);
+    this._restack(was);
     this._renderLegend(); this._clearInspect(); this.invalidate();
   }
   toggleFullscreen(force) {
@@ -474,9 +579,166 @@ export class PocketChart {
     document.removeEventListener('fullscreenchange', this._onFsChange);
     document.removeEventListener('webkitfullscreenchange', this._onFsChange);
     document.removeEventListener('keydown', this._onKeyFs);
+    if (this._menuAway) document.removeEventListener('pointerdown', this._menuAway, true);
     cancelAnimationFrame(this._raf); cancelAnimationFrame(this._zoomRaf); this._destroyed = true; cancelAnimationFrame(this._yRaf);
     this.root.remove();
   }
+  /* ---------- Exportar ---------- */
+  get _exportOpts() {
+    const E = this.opts.export;
+    if (E === false || E == null) return null;
+    const d = DEFAULTS.export, e = isObj(E) ? E : {};
+    return { ...d, ...e, formats: (e.formats || d.formats).filter((f) => ['png', 'pdf', 'xlsx', 'csv'].includes(f)), pdf: { ...d.pdf, ...(e.pdf || {}) } };
+  }
+
+  _toggleMenu(force) {
+    let m = this.root.querySelector('.pc-menu');
+    const open = force ?? (!m || m.hidden);
+    if (!open) { if (m) m.hidden = true; document.removeEventListener('pointerdown', this._menuAway, true); return; }
+    const EX = this._exportOpts; if (!EX) return;
+    if (!m) {
+      m = document.createElement('div'); m.className = 'pc-menu'; m.setAttribute('role', 'menu');
+      this.root.querySelector('.pc-head').appendChild(m);
+      m.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-fmt]'); if (!b) return;
+        this._toggleMenu(false);
+        this.export(b.dataset.fmt).catch((err) => this._emit('error', err));
+      });
+      m.addEventListener('keydown', (e) => { if (e.key === 'Escape') { this._toggleMenu(false); this.$actions.querySelector('[data-act=dl]')?.focus(); } });
+      this._menuAway = (e) => { if (!e.composedPath().some((n) => n === m || (n.dataset && n.dataset.act === 'dl'))) this._toggleMenu(false); };
+    }
+    m.innerHTML = EX.formats.map((f) => `<button role="menuitem" data-fmt="${f}">${esc(this.t[f])}<small>${f.toUpperCase()}</small></button>`).join('');
+    m.hidden = false;
+    m.querySelector('button')?.focus({ preventScroll: true });
+    document.addEventListener('pointerdown', this._menuAway, true);
+  }
+
+  _fileName(ext) {
+    const EX = this._exportOpts || DEFAULTS.export;
+    const base = (EX.filename || this.opts.title || 'grafico').toString().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'grafico';
+    return `${base}.${ext}`;
+  }
+
+  /** Dibuja el gráfico en su estado final (sin tooltip ni animación) en otro lienzo. */
+  _snapshotCanvas(scale) {
+    const c = this.$canvas, W = c._w, H = c._h;
+    const off = document.createElement('canvas');
+    off.width = Math.round(W * scale); off.height = Math.round(H * scale);
+    const ctx = off.getContext('2d'); ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    const keep = { ctx: this.ctx, _inspect: this._inspect, _enter: this._enter, _enterPending: this._enterPending, _morph: this._morph, _yCur: this._yCur, _morphK: this._morphK };
+    try {
+      Object.assign(this, { ctx, _inspect: null, _enter: null, _enterPending: false, _morph: null, _yCur: null });
+      this._render();
+    } finally { Object.assign(this, keep); this.invalidate(); }
+    return off;
+  }
+
+  /** Imagen completa: título, subtítulo, leyenda y gráfico. */
+  _composeImage(scale) {
+    const EX = this._exportOpts || DEFAULTS.export, C = this._colors, o = this.opts;
+    scale = scale || EX.scale || 3;
+    const plot = this._snapshotCanvas(scale);
+    const W = this.$canvas._w, H = this.$canvas._h, pad = 16, font = C.font;
+    const mc = document.createElement('canvas').getContext('2d');
+    // Leyenda: elementos visibles, en varias líneas si hace falta
+    const items = this._legendItems().filter((it) => !this._hidden.has(it.key));
+    const showLegend = items.length > 1 && o.legend.show !== false;
+    mc.font = `500 12.5px ${font}`;
+    const lines = []; let line = [], lw = 0;
+    if (showLegend) items.forEach((it) => {
+      const w = 14 + mc.measureText(it.name).width + 16;
+      if (line.length && lw + w > W) { lines.push(line); line = []; lw = 0; }
+      line.push({ ...it, w }); lw += w;
+    });
+    if (line.length) lines.push(line);
+    let y = pad;
+    const titleH = o.title ? 22 : 0, subH = o.subtitle ? 18 : 0;
+    const head = titleH + subH + (titleH || subH ? 10 : 0);
+    const legH = lines.length * 22 + (lines.length ? 8 : 0);
+    const TW = W + pad * 2, TH = pad + head + legH + H + pad;
+    const out = document.createElement('canvas');
+    out.width = Math.round(TW * scale); out.height = Math.round(TH * scale);
+    const ctx = out.getContext('2d'); ctx.scale(scale, scale);
+    ctx.fillStyle = EX.background || C.bg || '#fff'; ctx.fillRect(0, 0, TW, TH);
+    ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+    if (o.title) { ctx.fillStyle = C.fg; ctx.font = `600 16px ${font}`; ctx.fillText(o.title, pad, y); y += titleH; }
+    if (o.subtitle) { ctx.fillStyle = C.muted; ctx.font = `13px ${font}`; ctx.fillText(o.subtitle, pad, y); y += subH; }
+    if (head) y += 10;
+    ctx.font = `500 12.5px ${font}`; ctx.textBaseline = 'middle';
+    lines.forEach((ln) => {
+      let x = pad;
+      ln.forEach((it) => {
+        ctx.fillStyle = it.color; ctx.beginPath(); ctx.arc(x + 4, y + 9, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = C.fg; ctx.fillText(it.name, x + 14, y + 9.5); x += it.w;
+      });
+      y += 22;
+    });
+    if (lines.length) y += 8;
+    ctx.drawImage(plot, pad, y, W, H);
+    return out;
+  }
+
+  /** Tabla de datos (la misma que se exporta a Excel y CSV). */
+  _dataRows() {
+    if (this._isPie) {
+      const s = this._series[0];
+      return [[{ v: this.t.category, t: 's' }, { v: s?.name || this.t.total, t: 's' }], ...this._pie.map((p) => [{ v: p.label, t: 's' }, { v: p.value, t: 'n' }])];
+    }
+    const xs = new Map();
+    this._series.forEach((s) => s.points.forEach((q) => xs.set(q.x, true)));
+    const keys = [...xs.keys()].sort((a, b) => a - b);
+    const look = this._series.map((s) => { const m = new Map(); s.points.forEach((q) => m.set(q.x, q.v)); return m; });
+    const xCell = (x) => this._xType === 'time' ? { v: 25569 + (x - new Date(x).getTimezoneOffset() * 6e4) / 864e5, t: 'd', raw: x }
+      : this._xType === 'category' ? { v: this._cats[x] ?? String(x), t: 's' } : { v: x, t: 'n' };
+    const head = [{ v: this.opts.x.label || (this._xType === 'time' ? this.t.date : this._xType === 'category' ? this.t.category : 'X'), t: 's' },
+      ...this._series.map((s) => ({ v: s.unit ? `${s.name} (${s.unit})` : s.name, t: 's' }))];
+    return [head, ...keys.map((x, i) => [xCell(x), ...look.map((m) => ({ v: m.get(x), t: 'n' }))])];
+  }
+
+  /**
+   * Genera el archivo y lo descarga (o se lo pasa a `export.onExport`).
+   * `format`: 'png' | 'pdf' | 'xlsx' | 'csv'. Devuelve una promesa con { blob, filename, format }.
+   */
+  async export(format = 'png', opts = {}) {
+    const EX = { ...(this._exportOpts || DEFAULTS.export), ...opts };
+    const blob = await this.toBlob(format, EX);
+    const filename = opts.filename ? String(opts.filename) : this._fileName(format);
+    const res = { blob, filename, format };
+    if (opts.download === false) return res;
+    if (typeof EX.onExport === 'function') await EX.onExport(blob, filename, format);
+    else {
+      const url = URL.createObjectURL(blob), a = document.createElement('a');
+      a.href = url; a.download = filename; a.rel = 'noopener'; a.style.display = 'none';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+    this._emit('export', { format, filename, size: blob.size });
+    return res;
+  }
+
+  /** Sólo genera el archivo, sin descargarlo. */
+  async toBlob(format = 'png', opts = {}) {
+    const EX = { ...(this._exportOpts || DEFAULTS.export), ...opts };
+    if (format === 'png') return canvasBlob(this._composeImage(EX.scale), 'image/png');
+    if (format === 'pdf') {
+      const img = this._composeImage(EX.scale || 3);
+      const jpeg = new Uint8Array(await (await canvasBlob(img, 'image/jpeg', 0.95)).arrayBuffer());
+      const s = EX.scale || 3;
+      return buildPdf(jpeg, img.width / s, img.height / s, { ...DEFAULTS.export.pdf, ...(EX.pdf || {}), _pxW: img.width, _pxH: img.height }, this.opts.title);
+    }
+    const rows = this._dataRows();
+    if (format === 'xlsx') {
+      const widths = rows[0].map((_, i) => clamp(Math.max(...rows.slice(0, 200).map((r) => (r[i] && r[i].t === 'd' ? 17 : String(r[i]?.v ?? '').length + 2))), 8, 40));
+      return buildXlsx(this.opts.title || this.t.chart, rows, widths);
+    }
+    if (format === 'csv') {
+      const cell = (c) => { if (!c || c.v == null) return ''; const v = c.t === 'd' ? new Date(c.raw).toISOString() : String(c.v); return /[",;\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
+      return new Blob(['﻿' + rows.map((r) => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    }
+    throw new Error(`Formato no soportado: ${format}`);
+  }
+
   get isZoomed() { return this._view && (this._view[0] > this._full[0] + 1e-9 || this._view[1] < this._full[1] - 1e-9); }
   get lang() {
     let l = this.opts.lang;
@@ -519,6 +781,8 @@ export class PocketChart {
     const fs = this.root.classList.contains('pc-fs');
     let html = '';
     if (this.isZoomed && !this._isPie) html += `<button class="pc-btn" data-act="reset" aria-label="${t.reset}" title="${t.reset}">${ICONS.reset}</button>`;
+    const EX = this._exportOpts;
+    if (EX && EX.button !== false && EX.formats.length) html += `<button class="pc-btn" data-act="dl" aria-haspopup="menu" aria-label="${t.download}" title="${t.download}">${ICONS.download}</button>`;
     if (o.fullscreen) html += `<button class="pc-btn" data-act="fs" aria-label="${fs ? t.exit : t.fullscreen}" title="${fs ? t.exit : t.fullscreen}">${fs ? ICONS.close : ICONS.expand}</button>`;
     if (html !== this._actionsHtml) { this.$actions.innerHTML = html; this._actionsHtml = html; }
     this.root.querySelector('.pc-head').hidden = !o.title && !o.subtitle && !html;
@@ -582,7 +846,8 @@ export class PocketChart {
         else if (Array.isArray(d)) { x = d[0]; y = d[1]; r = d[2]; }
         else { x = d.x ?? d.label ?? d.name ?? i; y = d.y ?? d.value; label = d.label ?? d.name; r = d.r; }
         x = d == null || typeof d === 'number' ? i : toX(x, i);
-        return { x, y: y == null || isNaN(+y) ? null : +y, label, r, raw: d, i };
+        const yy = y == null || isNaN(+y) ? null : +y;
+        return { x, y: yy, v: yy, label, r, raw: d, i };
       }).filter((p) => isFinite(p.x));
       if (xType !== 'category') pts.sort((a, b) => a.x - b.x);
       return {
@@ -593,6 +858,7 @@ export class PocketChart {
         slot: si,
         curve: s.curve || ((s.smooth ?? o.smooth) === false ? 'linear' : (o.line && o.line.curve) || 'smooth'),
         lineWidth: s.lineWidth, dash: s.dash, fillOpacity: s.fillOpacity, markers: s.markers, radius: s.radius,
+        stackOpt: s.stack,
         unit: s.unit || '',
         format: s.format || null,
         points: pts,
@@ -631,9 +897,60 @@ export class PocketChart {
     this._catW = null; this._navKey = null;
     this._yCur = null;
     this._inspect = null;
+    this._computeStacks();
     this._renderHeader();
     this._renderLegend();
     this._renderTable();
+  }
+
+  /* ---------- Apilado ----------
+   * Cada punto guarda su valor real en `v`; `y` pasa a ser la cima acumulada y `below` apunta
+   * al punto de la serie de debajo (misma x, mismo signo). Así las animaciones y el zoom
+   * funcionan igual que sin apilar: la base de un segmento es la cima animada del de abajo. */
+  _computeStacks() {
+    const o = this.opts, pct = o.stack === 'percent';
+    const groups = new Map();
+    this._stacked = false;
+    (this._series || []).forEach((s) => {
+      s.points.forEach((q) => { q.y = q.v; q.below = null; q.edge = false; });
+      s._pyr = undefined; s.stackKey = null;
+      if (this._isPie || s.type === 'scatter' || s.stackOpt === false) return;
+      const name = typeof s.stackOpt === 'string' ? s.stackOpt : s.stackOpt === true || o.stack ? 'all' : null;
+      if (!name) return;
+      s.stackKey = s.type + ':' + name;
+      this._stacked = true;
+      if (this._hidden.has(s.key)) return;
+      if (!groups.has(s.stackKey)) groups.set(s.stackKey, []);
+      groups.get(s.stackKey).push(s);
+    });
+    this._pct = pct && this._stacked;
+    groups.forEach((g) => {
+      const tot = new Map(), pos = new Map(), neg = new Map();
+      if (pct) g.forEach((s) => s.points.forEach((q) => { if (q.v != null) tot.set(q.x, (tot.get(q.x) || 0) + Math.abs(q.v)); }));
+      g.forEach((s) => s.points.forEach((q) => {
+        if (q.v == null) return;
+        const m = q.v >= 0 ? pos : neg, prev = m.get(q.x), sum = (prev ? prev.sum : 0) + q.v;
+        q.below = prev ? prev.q : null;
+        q.y = pct ? sum * 100 / (tot.get(q.x) || 1) : sum;
+        m.set(q.x, { sum, q });
+      }));
+      pos.forEach((e) => (e.q.edge = true)); neg.forEach((e) => (e.q.edge = true));
+    });
+    this._dataVer = (this._dataVer || 0) + 1;
+  }
+
+  /** Recalcula el apilado tras mostrar u ocultar series, con transición. */
+  _restack(wasHidden) {
+    if (!this._stacked) return;
+    const prev = this._snapshot();
+    this._computeStacks();
+    this._startMorph(prev);
+    if (!this._morph) return;
+    // Las series que reaparecen crecen desde la cima de la serie de debajo.
+    this._series.forEach((s) => {
+      if (!wasHidden.has(s.key) || this._hidden.has(s.key)) return;
+      s.points.forEach((q) => { if (q.y != null) q.y0 = q.below ? (q.below.y0 ?? q.below.y) : null; });
+    });
   }
 
   _color(i) { return this._palette ? this._palette[i % this._palette.length] : PALETTE.light[i % 8]; }
@@ -645,7 +962,7 @@ export class PocketChart {
       const ref = this._series[0]?.points || [];
       rows.push(`<tr><th></th>${this._series.map((s) => `<th>${esc(s.name)}</th>`).join('')}</tr>`);
       ref.slice(0, 300).forEach((p) => rows.push(`<tr><th>${esc(this._fmtXFull(p.x))}</th>${this._series.map((s) => {
-        const q = s.points[nearestIndex(s.points, p.x)]; return `<td>${q && q.x === p.x ? this._fmtY(q.y, s) : ''}</td>`;
+        const q = s.points[nearestIndex(s.points, p.x)]; return `<td>${q && q.x === p.x ? this._fmtY(q.v, s) : ''}</td>`;
       }).join('')}</tr>`));
     }
     this.$table.innerHTML = `<caption>${esc(this.opts.title || this.t.chart)}</caption>${rows.join('')}`;
@@ -706,6 +1023,7 @@ export class PocketChart {
     const dec = Math.max(0, -Math.floor(Math.log10(step)));
     return this._nf(Math.min(dec, 6)).format(v);
   }
+  _fmtYTick(v, step) { const t = this._fmtTick(v, step); return this._pct && !this.opts.y.format ? t + '%' : t; }
   _fmtXFull(x) {
     if (this.opts.x.format) return this.opts.x.format(x, 'full');
     if (this._xType === 'time') {
@@ -766,6 +1084,7 @@ export class PocketChart {
       const b = e.target.closest('[data-act]'); if (!b) return;
       if (b.dataset.act === 'reset') this.resetZoom();
       if (b.dataset.act === 'fs') this.toggleFullscreen();
+      if (b.dataset.act === 'dl') this._toggleMenu();
     });
     this._onFsChange = () => {
       const on = document.fullscreenElement === this.root || document.webkitFullscreenElement === this.root;
@@ -789,6 +1108,7 @@ export class PocketChart {
   }
 
   _toggleKey(key, solo) {
+    const was = new Set(this._hidden);
     const items = this._legendItems().map((i) => i.key);
     if (solo || this.opts.legend.mode === 'single') {
       const onlyThis = items.filter((k) => k !== key);
@@ -797,6 +1117,7 @@ export class PocketChart {
     } else if (this._hidden.has(key)) this._hidden.delete(key);
     else if (items.filter((k) => !this._hidden.has(k)).length > 1) this._hidden.add(key);
     else return; // nunca dejar el gráfico vacío
+    this._restack(was);
     this._emit('toggle', { key, visible: !this._hidden.has(key), hidden: [...this._hidden] });
     this._renderLegend(); this._clearInspect(); this.invalidate();
   }
@@ -1064,12 +1385,13 @@ export class PocketChart {
       if (mm[0] < lo) lo = mm[0]; if (mm[1] > hi) hi = mm[1];
     });
     if (!isFinite(lo)) { lo = 0; hi = 1; }
-    const zero = o.zero ?? vis.some((s) => s.type === 'bar' || s.type === 'area');
+    const zero = o.zero ?? vis.some((s) => s.type === 'bar' || s.type === 'area' || s.stackKey);
     if (zero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
+    if (this._pct) { lo = Math.min(lo, 0) < -1e-9 ? -100 : 0; hi = 100; }
     if (o.min != null) lo = o.min;
     if (o.max != null) hi = o.max;
     if (hi === lo) { hi += Math.abs(hi) * 0.1 || 1; lo -= zero && lo === 0 ? 0 : Math.abs(lo) * 0.1 || 1; }
-    const pad = (hi - lo) * 0.06;
+    const pad = this._pct ? 0 : (hi - lo) * 0.06;
     if (o.max == null) hi += pad;
     if (o.min == null && !(zero && lo === 0)) lo -= pad;
     this._ytc = { key, o, val: [lo, hi] };
@@ -1166,9 +1488,9 @@ export class PocketChart {
     const yStep = niceStep(target[1] - target[0], yCount);
     const yTicks = [];
     for (let v = Math.ceil(ya / yStep) * yStep; v <= yb + yStep * 1e-6; v += yStep) yTicks.push(Math.abs(v) < yStep * 1e-9 ? 0 : v);
-    const yLabels = yTicks.map((v) => this._fmtTick(v, yStep));
+    const yLabels = yTicks.map((v) => this._fmtYTick(v, yStep));
     // El ancho del eje usa la etiqueta más larga del dominio objetivo, así no "tiembla" durante la animación.
-    const yW = Math.max(18, ...yLabels.map((l) => this._mw(l)), this._mw(this._fmtTick(target[0], yStep)), this._mw(this._fmtTick(target[1], yStep)));
+    const yW = Math.max(18, ...yLabels.map((l) => this._mw(l)), this._mw(this._fmtYTick(target[0], yStep)), this._mw(this._fmtYTick(target[1], yStep)));
     const r = this._plotRect = { x: yW + 10, y: 10, w: Math.max(10, W - yW - 10 - 8), h: Math.max(10, H - 10 - 26) };
 
     const C = this._colors;
@@ -1206,7 +1528,10 @@ export class PocketChart {
     if (enterType === 'fade') ctx.globalAlpha = this._p(0);
     const vis = this._visibleSeries();
     const bars = vis.filter((s) => s.type === 'bar');
-    bars.forEach((s, bi) => this._drawBars(s, bi, bars.length));
+    // Las barras apiladas del mismo grupo comparten hueco; las demás van una al lado de otra.
+    const slots = new Map();
+    bars.forEach((s) => { const k = s.stackKey || s.key; if (!slots.has(k)) slots.set(k, slots.size); });
+    bars.forEach((s) => this._drawBars(s, slots.get(s.stackKey || s.key), slots.size));
     vis.filter((s) => s.type === 'area').forEach((s) => this._drawLine(s, true));
     vis.filter((s) => s.type === 'line').forEach((s) => this._drawLine(s, false));
     vis.filter((s) => s.type === 'scatter').forEach((s) => this._drawScatter(s));
@@ -1397,6 +1722,16 @@ export class PocketChart {
     segs.forEach((seg) => {
       if (area) {
         const op = s.fillOpacity ?? o.area.opacity ?? 0.28;
+        if (s.stackKey) {
+          // Banda entre esta serie y la de debajo (relleno uniforme para que se lean las capas).
+          const low = seg.map((q) => [q[0], q[2].below ? this._sy(this._enter || this._morph ? this._ay(q[2].below, q[0]) : q[2].below.y) : base]).reverse();
+          ctx.beginPath();
+          ctx.moveTo(seg[0][0], seg[0][1]);
+          this._tracePath(seg, curve, false);
+          this._tracePath(low, curve, false);
+          ctx.closePath();
+          ctx.fillStyle = this._alpha(s.color, Math.min(1, op * 2)); ctx.fill();
+        } else {
         const g = ctx.createLinearGradient(0, r.y, 0, r.y + r.h);
         g.addColorStop(0, this._alpha(s.color, op)); g.addColorStop(1, this._alpha(s.color, op * 0.08));
         ctx.beginPath();
@@ -1404,6 +1739,7 @@ export class PocketChart {
         this._tracePath(seg, curve, false);
         ctx.lineTo(seg[seg.length - 1][0], base); ctx.closePath();
         ctx.fillStyle = g; ctx.fill();
+        }
       }
       if (lw <= 0) return;
       ctx.beginPath();
@@ -1464,13 +1800,15 @@ export class PocketChart {
       const q = p[i]; if (q.y == null) continue;
       const cx = this._sx(q.x);
       const x = cx - group / 2 + bi * (bw + gap) + gap / 2;
-      const val = this._ay(q, cx);
-      const y = this._sy(val), top = Math.min(y, base), h = Math.abs(base - y);
+      const val = this._ay(q, cx), bv = q.below ? this._ay(q.below, cx) : this._baseVal;
+      const y = this._sy(val), yb = q.below ? this._sy(bv) : base;
+      let top = Math.min(y, yb), h = Math.abs(yb - y);
       if (h < 0.5) continue;
+      if (q.below && h > 2.5) { h -= 1; if (val < bv) top += 1; } // fina separación entre segmentos
       ctx.globalAlpha = (hl != null && hl !== q.x ? 0.45 : 1) * (this._enter && this._anim.enter === 'fade' ? this._p(0) : 1);
-      const rad = Math.min(R, bw / 2, h);
+      const rad = s.stackKey && !q.edge ? 0 : Math.min(R, bw / 2, h);
       ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(x, top, bw, h, val >= this._baseVal ? [rad, rad, 0, 0] : [0, 0, rad, rad]); else ctx.rect(x, top, bw, h);
+      if (ctx.roundRect && rad > 0) ctx.roundRect(x, top, bw, h, val >= bv ? [rad, rad, 0, 0] : [0, 0, rad, rad]); else ctx.rect(x, top, bw, h);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
@@ -1527,7 +1865,7 @@ export class PocketChart {
     if (!hit) return;
     const changed = !this._inspect || this._inspect.id !== hit.id;
     this._inspect = { ...hit, py, touch };
-    if (changed) { if (touch) navigator.vibrate?.(3); this._emit('inspect', { x: hit.x, label: this._fmtXFull(hit.x), points: hit.rows.map((r) => ({ series: r.s.name, x: r.q.x, y: r.q.y, data: r.q.raw })) }); }
+    if (changed) { if (touch) navigator.vibrate?.(3); this._emit('inspect', { x: hit.x, label: this._fmtXFull(hit.x), points: hit.rows.map((r) => ({ series: r.s.name, x: r.q.x, y: r.q.v, data: r.q.raw })) }); }
     this.invalidate();
   }
 
@@ -1567,7 +1905,7 @@ export class PocketChart {
       const byKey = new Map(ins.rows.map((rw) => [rw.s.key, rw]));
       this.$legend.querySelectorAll('.pc-chip').forEach((b) => {
         const rw = byKey.get(b.dataset.key);
-        const el = b.querySelector('.pc-chip-val'), v = rw ? this._fmtY(rw.q.y, rw.s) : '';
+        const el = b.querySelector('.pc-chip-val'), v = rw ? this._fmtY(rw.q.v, rw.s) : '';
         if (el.textContent !== v) el.textContent = v;
       });
     }
@@ -1576,10 +1914,15 @@ export class PocketChart {
 
   _tipHtml(ins) {
     const f = this.opts.tooltip.format;
-    if (f) return f({ x: ins.x, label: this._fmtXFull(ins.x), points: ins.rows.map((r) => ({ series: r.s.name, color: r.s.color, x: r.q.x, y: r.q.y, data: r.q.raw })) });
+    if (f) return f({ x: ins.x, label: this._fmtXFull(ins.x), points: ins.rows.map((r) => ({ series: r.s.name, color: r.s.color, x: r.q.x, y: r.q.v, data: r.q.raw, share: r.s.stackKey && this._pct ? r.q.y - (r.q.below ? r.q.below.y : 0) : undefined })) });
     const head = ins.scatter ? `${esc(ins.rows[0].s.name)}` : esc(this._fmtXFull(ins.x));
-    const rows = ins.rows.map(({ s, q }) => `<div class="pc-tip-r"><span class="pc-dot" style="background:${s.color}"></span><span class="pc-tip-n">${esc(ins.scatter ? (q.label ?? `x ${this._nf(2).format(q.x)}`) : s.name)}</span><span class="pc-tip-v">${esc(this._fmtY(q.y, s))}</span></div>`).join('');
-    return `<div class="pc-tip-h">${head}</div>${rows}`;
+    // Con series apiladas, el orden del tooltip sigue al dibujo: la capa de arriba, primero.
+    const list = !ins.scatter && this._stacked && ins.rows.every((r) => r.s.stackKey) ? ins.rows.slice().reverse() : ins.rows;
+    const rows = list.map(({ s, q }) => `<div class="pc-tip-r"><span class="pc-dot" style="background:${s.color}"></span><span class="pc-tip-n">${esc(ins.scatter ? (q.label ?? `x ${this._nf(2).format(q.x)}`) : s.name)}</span><span class="pc-tip-v">${esc(this._fmtY(q.v, s))}${s.stackKey && this._pct && q.v != null ? ` <span class="pc-tip-n">· ${this._nf(1).format(q.y - (q.below ? q.below.y : 0))} %</span>` : ''}</span></div>`).join('');
+    // Total de las series apiladas en ese punto
+    const st = ins.scatter ? [] : ins.rows.filter((r) => r.s.stackKey && r.q.v != null);
+    const total = st.length > 1 ? `<div class="pc-tip-r pc-tip-t"><span class="pc-tip-n">${esc(this.t.total)}</span><span class="pc-tip-v">${esc(this._fmtY(st.reduce((n, r) => n + r.q.v, 0), st[0].s))}</span></div>` : '';
+    return `<div class="pc-tip-h">${head}</div>${rows}${total}`;
   }
 
   /** Coloca el tooltip junto al punto, por encima del dedo, sin salirse del gráfico. */
@@ -1829,7 +2172,7 @@ export class PocketChart {
 const HTMLEl = typeof HTMLElement !== 'undefined' ? HTMLElement : class {};
 
 export class PocketChartElement extends HTMLEl {
-  static get observedAttributes() { return ['type', 'title', 'subtitle', 'height', 'theme', 'lang', 'legend-mode', 'animation', 'easing', 'duration', 'loader', 'loading']; }
+  static get observedAttributes() { return ['type', 'title', 'subtitle', 'height', 'theme', 'lang', 'legend-mode', 'stack', 'export', 'animation', 'easing', 'duration', 'loader', 'loading']; }
   constructor() { super(); this._cfg = null; }
   /** Configuración completa como objeto (para frameworks). */
   set config(v) { this._cfg = v; this._mount(); }
@@ -1854,6 +2197,8 @@ export class PocketChartElement extends HTMLEl {
     ['type', 'title', 'subtitle', 'theme', 'lang'].forEach((k) => { if (this.hasAttribute(k)) a[k] = this.getAttribute(k); });
     if (this.hasAttribute('height')) a.height = +this.getAttribute('height');
     if (this.hasAttribute('legend-mode')) a.legend = { mode: this.getAttribute('legend-mode') };
+    if (this.hasAttribute('export')) { const v = this.getAttribute('export'); a.export = v === 'false' ? false : v ? { formats: v.split(/[\s,]+/).filter(Boolean) } : true; }
+    if (this.hasAttribute('stack')) { const v = this.getAttribute('stack'); a.stack = v === 'percent' ? 'percent' : v !== 'false'; }
     const an = {};
     if (this.hasAttribute('animation')) an.enter = this.getAttribute('animation');
     if (this.hasAttribute('easing')) an.easing = this.getAttribute('easing');

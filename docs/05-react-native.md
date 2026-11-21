@@ -81,7 +81,8 @@ export default function FeedScreen() {
 | `background` | Color de fondo de la WebView (usa el de tu pantalla) |
 | `style` | Estilo del contenedor (márgenes, etc.). El alto se calcula solo. |
 | `onInspect`, `onZoom`, `onToggle`, `onReady`, `onUpdated`, `onError` | Eventos |
-| `ref` | `ref.current.resetZoom()`, `.replay()`, `.setLoading(true)`, `.call('zoomTo', a, b)` |
+| `onExport` | Recibe el archivo exportado (PNG, PDF, Excel). Ver *Paso 6* |
+| `ref` | `ref.current.resetZoom()`, `.replay()`, `.setLoading(true)`, `.export('pdf')`, `.call('zoomTo', a, b)` |
 
 ## Paso 4. Modo oscuro
 
@@ -109,6 +110,30 @@ const cerrar = async () => { setGrande(false); await ScreenOrientation.unlockAsy
   <PocketChartView options={{ ...opciones, height: 280 }} series={series} />
 </Modal>
 ```
+
+## Paso 6. Exportar a PNG, PDF o Excel
+
+Dentro de una WebView no hay descargas, así que el archivo llega a tu app en base64 por `onExport`, y tú decides si guardarlo o compartirlo. Si no pasas `onExport`, el botón de descarga no aparece.
+
+```bash
+npx expo install expo-file-system expo-sharing
+```
+
+```jsx
+import * as FileSystem from 'expo-file-system/legacy'; // en SDK 53 o anterior: 'expo-file-system'
+import * as Sharing from 'expo-sharing';
+
+const guardar = async ({ filename, mime, base64 }) => {
+  const uri = FileSystem.cacheDirectory + filename;
+  await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
+  await Sharing.shareAsync(uri, { mimeType: mime }); // abre "Compartir": guardar en Archivos, WhatsApp, correo…
+};
+
+<PocketChartView ref={chartRef} options={opciones} series={series} onExport={guardar} />
+<Button title="PDF" onPress={() => chartRef.current.export('pdf')} />
+```
+
+`onExport` recibe `{ filename, format, mime, base64 }`. Con React Native CLI puedes usar `react-native-fs` y `react-native-share` de la misma forma.
 
 ## Formatos con funciones
 
