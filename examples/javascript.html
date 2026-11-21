@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PocketChart · Ejemplo JavaScript</title>
+  <style>
+    body { margin: 0; padding: 16px; font-family: system-ui, sans-serif; background: #f5f6f8; }
+    .card { max-width: 640px; margin: 0 auto 12px; background: #fff; border: 1px solid rgba(0,0,0,.08); border-radius: 14px; padding: 16px 14px; }
+    button { font: inherit; padding: 8px 12px; border-radius: 8px; border: 0; background: #2a78d6; color: #fff; }
+    @media (prefers-color-scheme: dark) { body { background: #0e0f12; } .card { background: #15171b; border-color: rgba(255,255,255,.08); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div id="grafico"></div>
+    <p><button id="nuevos">Datos nuevos</button> <span id="sel"></span></p>
+  </div>
+
+  <script type="module">
+    import { create } from '../dist/pocketchart.esm.js';
+
+    // Datos de ejemplo: una lectura cada hora durante 30 días
+    const generar = () => {
+      const t0 = Date.now() - 30 * 24 * 36e5;
+      return Array.from({ length: 30 * 24 }, (_, i) => [t0 + i * 36e5, +(20 + 4 * Math.sin(i / 24 * 6.283) + Math.random()).toFixed(2)]);
+    };
+
+    const chart = create('#grafico', {
+      type: 'area',
+      title: 'Temperatura',
+      subtitle: 'Últimos 30 días',
+      lang: 'es',
+      loader: { type: 'skeleton' },
+      animation: { enter: 'grow', easing: 'easeOutCubic', duration: 800 },
+    });
+
+    // Simula una petición con 1 s de espera
+    chart.load(() => new Promise((ok) => setTimeout(() => ok([{ name: 'Sala', unit: '°C', data: generar() }]), 1000)));
+
+    chart.on('inspect', (s) => { document.getElementById('sel').textContent = s ? `${s.label}: ${s.points[0].y} °C` : ''; });
+    document.getElementById('nuevos').onclick = () => chart.setData([{ name: 'Sala', unit: '°C', data: generar() }]);
+  </script>
+</body>
+</html>

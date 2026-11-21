@@ -1,0 +1,412 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body><title>PocketChart</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: una sola columna estrecha; pestañas fijas arriba (Ejemplos · Personaliza · Código).
+   Superficies blancas con borde fino, sin sombras; un único color de acento. */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --fg:#16181d; --muted:#6b7280; --faint:#9ca3af; --line:rgba(22,24,29,.08); --fill:rgba(22,24,29,.05);
+  --accent:#2a78d6; --on-accent:#ffffff;
+  --font:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --tabs-h:52px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e0f12; --surface:#15171b; --fg:#ecedef; --muted:#9aa0aa; --faint:#6b7280; --line:rgba(236,237,239,.09); --fill:rgba(236,237,239,.06);
+  --accent:#3987e5; color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0e0f12; --surface:#15171b; --fg:#ecedef; --muted:#9aa0aa; --faint:#6b7280; --line:rgba(236,237,239,.09); --fill:rgba(236,237,239,.06);
+  --accent:#3987e5; color-scheme:dark}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--font);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 56px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:640px;margin:0 auto}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Cabecera */
+.top{padding:28px 2px 16px;display:flex;flex-direction:column;gap:4px}
+.brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:600;letter-spacing:-.015em}
+.logo{width:22px;height:22px;border-radius:6px;background:var(--accent);display:grid;place-items:center}
+.logo svg{width:14px;height:14px}
+.ver{font-size:12px;font-weight:500;color:var(--muted);background:var(--fill);border-radius:6px;padding:1px 7px;letter-spacing:0}
+.top p{margin:0;color:var(--muted);font-size:14px}
+
+/* Pestañas */
+.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:8;background:var(--bg);padding:6px 0 10px;margin:0 -2px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--fill);border-radius:10px;padding:3px;gap:2px}
+.seg button{appearance:none;border:0;background:transparent;height:34px;border-radius:8px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;transition:background .15s,color .15s}
+.seg button[aria-selected=true]{background:var(--surface);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+
+/* Tarjetas */
+.stack{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 14px 12px}
+.meta{display:flex;align-items:center;gap:12px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.meta-text{flex:1;min-width:0}
+.desc{margin:0;font-size:13px;color:var(--fg)}
+.tag{margin:2px 0 0;font-size:12px;color:var(--muted)}
+.icon-btn{appearance:none;border:0;background:var(--fill);width:34px;height:34px;border-radius:9px;display:grid;place-items:center;cursor:pointer;color:var(--fg);flex-shrink:0}
+.icon-btn svg{width:16px;height:16px}
+.hint{margin:0 2px 12px;font-size:12.5px;color:var(--muted)}
+
+/* Personaliza */
+.preview{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--tabs-h));z-index:6;box-shadow:0 12px 20px -16px rgba(0,0,0,.35)}
+.actions{display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.act{appearance:none;border:0;background:var(--fill);height:34px;padding:0 10px;flex:1;justify-content:center;white-space:nowrap;border-radius:9px;font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.act svg{width:15px;height:15px}
+.act.primary{background:var(--accent);color:var(--on-accent)}
+.settings{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+details.group{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+details.group>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:13px 14px;font-size:14px;font-weight:600}
+details.group>summary::-webkit-details-marker{display:none}
+details.group>summary::after{content:"";width:7px;height:7px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg);transition:transform .2s;margin-right:4px}
+details.group[open]>summary::after{transform:rotate(-135deg)}
+.rows{padding:0 14px 6px}
+.r{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:46px;border-top:1px solid var(--line);padding:6px 0}
+.r>label,.r>.lbl{font-size:13.5px;color:var(--fg)}
+.r select{appearance:none;border:0;background:var(--fill);color:var(--fg);font:inherit;font-size:13.5px;height:32px;border-radius:8px;padding:0 28px 0 10px;max-width:58%;
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 14px) 14px,calc(100% - 10px) 14px;background-size:4px 4px;background-repeat:no-repeat}
+.r.range{flex-wrap:wrap;gap:4px 12px;padding:10px 0}
+.r.range output{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.r.range input{flex-basis:100%;width:100%;accent-color:var(--accent);margin:2px 0 0}
+.r input[type=color]{appearance:none;width:44px;height:28px;border:1px solid var(--line);border-radius:7px;background:none;padding:2px;cursor:pointer}
+.swatches{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.sw{appearance:none;border:0;border-radius:8px;padding:4px;background:transparent;cursor:pointer;display:flex;gap:2px;box-shadow:inset 0 0 0 1px var(--line)}
+.sw[aria-pressed=true]{box-shadow:inset 0 0 0 2px var(--accent)}
+.sw i{width:6px;height:18px;border-radius:2px;display:block}
+
+/* Código */
+h2{font-size:13px;font-weight:600;color:var(--muted);margin:20px 2px 8px;text-transform:uppercase;letter-spacing:.06em}
+h2:first-child{margin-top:4px}
+.code-card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.code{margin:0;padding:14px;overflow-x:auto;font:12.5px/1.6 var(--mono);white-space:pre;color:var(--fg)}
+.copy{position:absolute;top:8px;right:8px;appearance:none;border:0;background:var(--fill);height:28px;padding:0 10px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer}
+.lede{margin:0 2px 10px;color:var(--muted);font-size:13.5px}
+.preview .pc-root{padding:10px;margin:-6px;border-radius:10px}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><span class="logo"><svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l4-4 3 2 5-6"/></svg></span>PocketChart<span class="ver">v0.3</span></div>
+    <p>Gráficos pensados para el pulgar. Ligera y sin dependencias.</p>
+  </header>
+
+  <nav class="tabs" aria-label="Secciones">
+    <div class="seg" role="tablist">
+      <button type="button" role="tab" data-tab="ejemplos" aria-selected="true">Ejemplos</button>
+      <button type="button" role="tab" data-tab="personaliza" aria-selected="false">Personaliza</button>
+      <button type="button" role="tab" data-tab="codigo" aria-selected="false">Código</button>
+    </div>
+  </nav>
+
+  <main>
+    <section id="tab-ejemplos" role="tabpanel">
+      <p class="hint">Toca para ver valores · Mantén y arrastra para recorrer · Pellizca para zoom</p>
+      <div class="stack">
+        <article class="card"><div id="c-feed"></div><p class="desc" hidden>El caso de tu captura: una serie a la vez, sin doble eje.</p></article>
+        <article class="card"><div id="c-energy"></div><p class="desc" hidden>8.760 lecturas. Pellizca para acercar y usa el mini-mapa.</p></article>
+        <article class="card"><div id="c-big"></div><p class="desc" hidden>200.000 puntos con zoom fluido.</p></article>
+        <article class="card"><div id="c-bars"></div><p class="desc" hidden>Toca un mes para comparar ambos años.</p></article>
+        <article class="card"><div id="c-scatter"></div><p class="desc" hidden>Toca cerca de un punto: se elige el más próximo.</p></article>
+        <article class="card"><div id="c-donut"></div><p class="desc" hidden>Toca una porción o un chip para ver su valor.</p></article>
+      </div>
+    </section>
+
+    <section id="tab-personaliza" role="tabpanel" hidden>
+      <div class="card preview">
+        <div id="c-play"></div>
+        <div class="actions">
+          <button class="act primary" id="b-load" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v4M12 17v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M3 12h4M17 12h4"/></svg>Cargar</button>
+          <button class="act" id="b-data" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-9"/></svg>Datos</button>
+          <button class="act" id="b-replay" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Repetir</button>
+        </div>
+      </div>
+
+      <form class="settings" id="f-play" onsubmit="return false">
+        <details class="group" open><summary>Gráfico</summary><div class="rows">
+          <div class="r"><label for="o-type">Tipo</label><select id="o-type">
+            <option value="line">Línea</option><option value="area">Área</option><option value="bar">Barras</option>
+            <option value="scatter">Dispersión</option><option value="donut">Donut</option><option value="pie">Pie</option></select></div>
+          <div class="r"><label for="o-theme">Tema</label><select id="o-theme">
+            <option value="auto">Automático</option><option value="light">Claro</option><option value="dark">Oscuro</option>
+            <option value="midnight">Medianoche</option><option value="paper">Papel</option></select></div>
+        </div></details>
+
+        <details class="group" open><summary>Animación de entrada</summary><div class="rows">
+          <div class="r"><label for="o-enter">Estilo</label><select id="o-enter">
+            <option value="draw">Dibujar</option><option value="grow">Crecer</option><option value="wave">Ola</option>
+            <option value="pop">Rebote</option><option value="fade">Aparecer</option><option value="none">Ninguna</option></select></div>
+          <div class="r"><label for="o-easing">Curva de tiempo</label><select id="o-easing">
+            <option value="easeOutCubic">Suave</option><option value="linear">Lineal</option><option value="easeInOut">Entrada y salida</option>
+            <option value="back">Con impulso</option><option value="elastic">Elástica</option><option value="bounce">Rebote</option></select></div>
+          <div class="r range"><label for="o-duration">Duración</label><output id="v-duration">900 ms</output><input type="range" id="o-duration" min="200" max="2500" step="50" value="900"></div>
+          <div class="r range"><label for="o-delay">Retraso</label><output id="v-delay">0 ms</output><input type="range" id="o-delay" min="0" max="1500" step="50" value="0"></div>
+        </div></details>
+
+        <details class="group"><summary>Animación de carga</summary><div class="rows">
+          <div class="r"><label for="o-loader">Estilo</label><select id="o-loader">
+            <option value="skeleton">Esqueleto</option><option value="pulse">Pulso</option><option value="wave">Onda</option>
+            <option value="spinner">Círculo</option><option value="dots">Puntos</option></select></div>
+          <div class="r range"><label for="o-loadms">Tiempo de carga simulado</label><output id="v-loadms">1,8 s</output><input type="range" id="o-loadms" min="400" max="5000" step="100" value="1800"></div>
+        </div></details>
+
+        <details class="group"><summary>Colores</summary><div class="rows">
+          <div class="r"><span class="lbl">Paleta</span><div class="swatches" id="o-palette"></div></div>
+          <div class="r"><label for="o-c1">Color principal</label><input type="color" id="o-c1" value="#2a78d6"></div>
+          <div class="r"><label for="o-bg">Fondo del gráfico</label><input type="color" id="o-bg" value="#ffffff"></div>
+        </div></details>
+
+        <details class="group"><summary>Trazo y forma</summary><div class="rows">
+          <div class="r"><label for="o-curve">Curva</label><select id="o-curve"><option value="smooth">Suave</option><option value="linear">Recta</option><option value="step">Escalón</option></select></div>
+          <div class="r"><label for="o-markers">Marcadores</label><select id="o-markers"><option value="auto">Automáticos</option><option value="true">Siempre</option><option value="false">Nunca</option></select></div>
+          <div class="r"><label for="o-shape">Forma del marcador</label><select id="o-shape"><option value="circle">Círculo</option><option value="square">Cuadrado</option><option value="diamond">Rombo</option></select></div>
+          <div class="r"><label for="o-grid">Rejilla</label><select id="o-grid"><option value="solid">Continua</option><option value="dashed">Punteada</option><option value="none">Sin rejilla</option></select></div>
+          <div class="r range"><label for="o-width">Grosor de línea</label><output id="v-width">2 px</output><input type="range" id="o-width" min="1" max="6" step="0.5" value="2"></div>
+          <div class="r range"><label for="o-area">Opacidad del relleno</label><output id="v-area">28 %</output><input type="range" id="o-area" min="0" max="0.8" step="0.02" value="0.28"></div>
+          <div class="r range"><label for="o-radius">Radio de barras</label><output id="v-radius">4 px</output><input type="range" id="o-radius" min="0" max="14" step="1" value="4"></div>
+          <div class="r range"><label for="o-thick">Grosor del donut</label><output id="v-thick">38 %</output><input type="range" id="o-thick" min="0.1" max="0.8" step="0.02" value="0.38"></div>
+        </div></details>
+      </form>
+    </section>
+
+    <section id="tab-codigo" role="tabpanel" hidden>
+      <h2>Tu configuración</h2>
+      <p class="lede">Se actualiza con lo que eliges en Personaliza.</p>
+      <div class="code-card"><pre class="code" id="o-code"></pre><button class="copy" id="b-copy" type="button">Copiar</button></div>
+
+      <h2>Como etiqueta HTML</h2>
+      <div class="code-card"><pre class="code">&lt;script src="pocketchart.min.js"&gt;&lt;/script&gt;
+
+&lt;pocket-chart type="line" title="Feed Cycles"
+  animation="draw" loader="wave" legend-mode="single"&gt;
+  &lt;script type="application/json"&gt;
+    { "series": [{ "name": "Gallons", "unit": "gal",
+      "data": [["2026-11-14T00:00", 351.4], ...] }] }
+  &lt;/script&gt;
+&lt;/pocket-chart&gt;</pre></div>
+
+      <h2>Con JavaScript</h2>
+      <div class="code-card"><pre class="code">import { create } from 'pocketchart';
+
+const chart = create('#grafico', {
+  type: 'area',
+  title: 'Consumo',
+  animation: { enter: 'grow' },
+});
+chart.load(() =&gt; fetch('/api/consumo').then((r) =&gt; r.json()));
+chart.on('inspect', (sel) =&gt; console.log(sel));</pre></div>
+    </section>
+  </main>
+</div>
+
+<script src="../dist/pocketchart.min.js"></script>
+<script>
+(function () {
+  const PC = window.PocketChart;
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  const noise = (a) => (rnd() - 0.5) * 2 * a;
+
+  /* ---------------- Playground ---------------- */
+  const $ = (id) => document.getElementById(id);
+  const PALETTES = {
+    'Por defecto': null,
+    'Océano': ['#0b6e99', '#2bb3c0', '#f2a65a', '#4a4e9c', '#7fd4c1'],
+    'Atardecer': ['#e4572e', '#f3a712', '#669bbc', '#29335c', '#a8c686'],
+    'Bosque': ['#2d6a4f', '#d4a373', '#588157', '#bc6c25', '#95b46a'],
+    'Neón': ['#00c2e0', '#ff4fd8', '#f5b700', '#7c5cff', '#2fd67b'],
+  };
+  const THEMES = {
+    midnight: { theme: 'dark', styleDark: { bg: '#0d1b2a', fg: '#e0e6ef', muted: '#8da2bb', grid: 'rgba(224,230,239,.08)', axis: 'rgba(224,230,239,.25)', chip: '#1b2a3d', chipOn: '#24405f', tip: '#16263a' } },
+    paper: { theme: 'light', style: { bg: '#fbf8f1', fg: '#2b2620', muted: '#7a6f60', grid: 'rgba(43,38,32,.09)', axis: 'rgba(43,38,32,.3)', chip: '#f1ebdd', chipOn: '#e6dcc4', tip: '#fffdf7', font: 'Georgia, "Times New Roman", serif' } },
+  };
+  let palette = 'Por defecto', c1Touched = false, bgTouched = false;
+  const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  const makeSeries = (type) => {
+    if (type === 'scatter') {
+      const g = (cx, cy, n) => Array.from({ length: n }, () => [+(cx + noise(0.4)).toFixed(2), +(cy + noise(0.2)).toFixed(2)]);
+      return [{ name: 'Sala A', data: g(1.6 + noise(0.2), 5.8, 30) }, { name: 'Sala B', data: g(2.1, 6.1 + noise(0.1), 30) }, { name: 'Sala C', data: g(2.5 + noise(0.2), 5.95, 24) }];
+    }
+    if (type === 'donut' || type === 'pie') {
+      return [{ name: 'Gasto', data: ['Vivienda', 'Comida', 'Transporte', 'Ocio', 'Ahorro'].map((label, i) => ({ label, value: Math.round([900, 420, 260, 180, 300][i] * (0.7 + rnd() * 0.6)) })) }];
+    }
+    const base = 40 + rnd() * 20;
+    return ['Ingresos', 'Gastos', 'Beneficio'].map((name, k) => ({
+      name, data: meses.map((m, i) => Math.round(base * (1 - k * 0.3) + 16 * Math.sin(i / 2 + k + rnd()) + rnd() * 10)),
+    }));
+  };
+  const read = () => {
+    const type = $('o-type').value, th = $('o-theme').value;
+    const colors = PALETTES[palette] ? PALETTES[palette].slice() : null;
+    let cols = colors;
+    if (c1Touched) { cols = (cols || PC.palette.light.slice()); cols[0] = $('o-c1').value; }
+    const cfg = {
+      type, title: { line: 'Resultados 2026', area: 'Resultados 2026', bar: 'Resultados 2026', scatter: 'EC frente a pH', donut: 'Presupuesto mensual', pie: 'Presupuesto mensual' }[type],
+      subtitle: type === 'scatter' ? 'Lecturas por sala' : type === 'donut' || type === 'pie' ? 'USD por categoría' : 'Miles de USD por mes',
+      height: 170, lang: 'es', hint: false,
+      animation: { enter: $('o-enter').value, easing: $('o-easing').value, duration: +$('o-duration').value, delay: +$('o-delay').value },
+      loader: { type: $('o-loader').value },
+      line: { width: +$('o-width').value, curve: $('o-curve').value },
+      markers: { show: { auto: 'auto', true: true, false: false }[$('o-markers').value], shape: $('o-shape').value },
+      area: { opacity: +$('o-area').value },
+      bar: { radius: +$('o-radius').value },
+      grid: { show: $('o-grid').value !== 'none', dashed: $('o-grid').value === 'dashed' },
+      donut: { thickness: +$('o-thick').value },
+    };
+    if (type === 'scatter') { cfg.x = { type: 'linear' }; cfg.y = { zero: false }; }
+    else if (type !== 'donut' && type !== 'pie') cfg.categories = meses;
+    if (type === 'donut' || type === 'pie') cfg.y = { format: (v) => '$' + v.toLocaleString('es') };
+    if (cols) cfg.colors = cols;
+    if (THEMES[th]) Object.assign(cfg, JSON.parse(JSON.stringify(THEMES[th])));
+    else cfg.theme = th;
+    if (bgTouched) { cfg.style = { ...(cfg.style || {}), bg: $('o-bg').value }; cfg.styleDark = { ...(cfg.styleDark || {}), bg: $('o-bg').value }; }
+    return cfg;
+  };
+  let play = null, playType = null, playSeries = null;
+  const showCode = (cfg) => {
+    const c = { ...cfg }; delete c.hint; delete c.height;
+    let js = JSON.stringify(c, null, 2).replace(/"([a-zA-Z0-9]+)":/g, '$1:');
+    if (cfg.y && cfg.y.format) js = js.replace(/y: \{\}/, "y: { format: (v) => '$' + v }");
+    $('o-code').textContent = `PocketChart.create('#grafico', ${js.replace(/\n}$/, ',\n  series: misSeries,\n}')});`;
+  };
+  const rebuild = () => {
+    const cfg = read();
+    if (playType !== cfg.type) { playSeries = makeSeries(cfg.type); playType = cfg.type; }
+    if (play) play.destroy();
+    play = PC.create('#c-play', { ...cfg, series: playSeries });
+    showCode(cfg);
+  };
+  // Paletas
+  $('o-palette').innerHTML = Object.keys(PALETTES).map((k) => {
+    const cols = PALETTES[k] || PC.palette.light.slice(0, 5);
+    return `<button type="button" class="sw" aria-pressed="${k === palette}" data-p="${k}" title="${k}" aria-label="Paleta ${k}">${cols.slice(0, 5).map((c) => `<i style="background:${c}"></i>`).join('')}</button>`;
+  }).join('');
+  $('o-palette').addEventListener('click', (e) => {
+    const b = e.target.closest('.sw'); if (!b) return;
+    palette = b.dataset.p; c1Touched = false;
+    $('o-c1').value = (PALETTES[palette] || PC.palette.light)[0];
+    document.querySelectorAll('.sw').forEach((s) => s.setAttribute('aria-pressed', s === b));
+    rebuild();
+  });
+  const outs = { duration: (v) => v + ' ms', delay: (v) => v + ' ms', loadms: (v) => (v / 1000).toLocaleString('es') + ' s', width: (v) => v + ' px', area: (v) => Math.round(v * 100) + ' %', radius: (v) => v + ' px', thick: (v) => Math.round(v * 100) + ' %' };
+  $('f-play').addEventListener('input', (e) => {
+    const id = e.target.id.slice(2);
+    if (outs[id]) $('v-' + id).textContent = outs[id](+e.target.value);
+    if (id === 'c1') c1Touched = true;
+    if (id === 'bg') bgTouched = true;
+  });
+  $('f-play').addEventListener('change', (e) => { if (e.target.id !== 'o-loadms') rebuild(); });
+  $('b-replay').addEventListener('click', () => play.replay());
+  $('b-data').addEventListener('click', () => { playSeries = makeSeries(playType); play.setData(playSeries); });
+  $('b-load').addEventListener('click', () => {
+    const ms = +$('o-loadms').value;
+    playSeries = makeSeries(playType);
+    play.load(new Promise((res) => setTimeout(() => res(playSeries), ms)));
+  });
+  $('b-copy').addEventListener('click', async () => {
+    const b = $('b-copy');
+    try { await navigator.clipboard.writeText($('o-code').textContent); b.textContent = 'Copiado'; }
+    catch (err) { const r = document.createRange(); r.selectNodeContents($('o-code')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = 'Seleccionado'; }
+    setTimeout(() => (b.textContent = 'Copiar'), 1600);
+  });
+  rebuild();
+
+  /* ---------------- Ejemplos: cada uno carga y anima al aparecer en pantalla ---------------- */
+  /* Pestañas (con #enlace para poder compartir una sección) */
+  const TABS = ['ejemplos', 'personaliza', 'codigo'];
+  const showTab = (t) => {
+    if (!TABS.includes(t)) t = 'ejemplos';
+    TABS.forEach((k) => { $('tab-' + k).hidden = k !== t; document.querySelector(`[data-tab="${k}"]`).setAttribute('aria-selected', String(k === t)); });
+  };
+  document.querySelector('.seg').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tab]'); if (!b) return;
+    showTab(b.dataset.tab);
+    try { history.replaceState(null, '', '#' + b.dataset.tab); } catch (_) { location.hash = b.dataset.tab; }
+    window.scrollTo({ top: 0 });
+  });
+  window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+  showTab(location.hash.slice(1));
+
+  const LOADERS = { skeleton: 'esqueleto', pulse: 'pulso', wave: 'onda', spinner: 'círculo', dots: 'puntos' };
+  const ENTERS = { draw: 'dibujar', grow: 'crecer', wave: 'ola', pop: 'rebote', fade: 'aparecer' };
+  const demo = (sel, cfg, loader, loadMs = 1400) => {
+    const { series, ...rest } = cfg;
+    const ch = PC.create(sel, { ...rest, loading: true, loader: { type: loader } });
+    const go = () => ch.load(() => new Promise((r) => setTimeout(() => r(series), loadMs)));
+    let started = false;
+    ch.on('visible', (v) => { if (v && !started) { started = true; go(); } });
+    const card = document.querySelector(sel).closest('.card');
+    const desc = card.querySelector('.desc');
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `<div class="meta-text"><p class="desc">${desc.textContent}</p><p class="tag">Carga: ${LOADERS[loader]} · Entrada: ${ENTERS[cfg.animation.enter]}</p></div>
+      <button class="icon-btn" type="button" aria-label="Repetir animación" title="Repetir animación"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>`;
+    desc.replaceWith(meta);
+    meta.querySelector('button').addEventListener('click', go);
+    return ch;
+  };
+
+  // 1) Feed cycles: 14 días, cada 2 horas
+  const start = new Date(2026, 10, 7).getTime(), H = 36e5;
+  const N = 14 * 12;
+  const mk = (fn) => Array.from({ length: N }, (_, i) => [start + i * 2 * H, +fn(i).toFixed(2)]);
+  demo('#c-feed', {
+    animation: { enter: 'draw', duration: 1200, easing: 'easeInOut' },
+    type: 'line', title: 'Feed Cycles', subtitle: 'Últimos 14 días · cada 2 h',
+    legend: { mode: 'single' }, lang: 'es',
+    series: [
+      { name: 'Gallons', unit: 'gal', data: mk((i) => 354 + 2 * Math.sin(i / 9) + (i % 37 < 4 ? -3.5 : 0) + noise(0.4)) },
+      { name: 'TempSetpoint', unit: '°F', data: mk((i) => (Math.floor(i / 40) % 2 ? 70 : 68)) },
+      { name: 'FeedTemp', unit: '°F', data: mk((i) => 68.5 + 1.6 * Math.sin((i / 12) * Math.PI * 2) + noise(0.3)) },
+      { name: 'ECSetpoint', unit: 'mS/cm', data: mk((i) => (i < 70 ? 1.8 : 2.1)) },
+      { name: 'Feed EC', unit: 'mS/cm', data: mk((i) => (i < 70 ? 1.8 : 2.1) + noise(0.12)) },
+      { name: 'PHSetpoint', unit: 'pH', data: mk(() => 5.9) },
+      { name: 'FeedPH', unit: 'pH', data: mk((i) => 5.9 + 0.15 * Math.sin(i / 5) + noise(0.05)) },
+    ],
+  }, 'wave');
+
+  // 2) Energía: un año horario
+  const y0 = new Date(2025, 10, 21).getTime();
+  const energy = [];
+  for (let i = 0; i < 8760; i++) {
+    const t = y0 + i * H, d = new Date(t), h = d.getHours(), doy = i / 24;
+    const season = 1 + 0.35 * Math.cos(((doy - 20) / 365) * Math.PI * 2);
+    const daily = 0.55 + 0.45 * Math.max(0, Math.sin(((h - 6) / 24) * Math.PI * 2)) + (h >= 19 && h <= 22 ? 0.35 : 0);
+    energy.push([t, +(1.1 * season * daily + noise(0.12) + 0.2).toFixed(3)]);
+  }
+  // Simula una petición lenta: muestra la animación de carga y luego entra con "fade".
+  window.__energy = demo('#c-energy', { type: 'area', title: 'Consumo eléctrico', subtitle: 'kWh por hora · 12 meses', lang: 'es', animation: { enter: 'grow', duration: 900 }, series: [{ name: 'Consumo', unit: 'kWh', data: energy }] }, 'skeleton', 2000);
+
+  // 2b) Rendimiento: 2 × 100.000 puntos
+  const big = (phase, amp) => { const out = new Array(100000), t0 = new Date(2026, 8, 1).getTime(); let v = 20; for (let i = 0; i < 100000; i++) { v += (rnd() - 0.5) * 0.25 + (21 + amp * Math.sin(i / 1440 * 6.283 + phase) - v) * 0.01; out[i] = [t0 + i * 6e4, +v.toFixed(2)]; } return out; };
+  demo('#c-big', { type: 'line', title: 'Temperatura de sensores', subtitle: '200.000 lecturas · °C', lang: 'es', animation: { enter: 'draw', duration: 900 },
+    series: [{ name: 'Sensor norte', unit: '°C', data: big(0, 4) }, { name: 'Sensor sur', unit: '°C', data: big(1.4, 2.5) }] }, 'wave', 1200);
+
+  // 3) Barras
+  demo('#c-bars', {
+    type: 'bar', animation: { enter: 'wave', duration: 700 }, title: 'Ventas mensuales', subtitle: 'Miles de USD', lang: 'es', categories: meses,
+    series: [
+      { name: '2025', data: meses.map((_, i) => Math.round(40 + 18 * Math.sin(i / 2) + rnd() * 10)) },
+      { name: '2026', data: meses.map((_, i) => (i < 11 ? Math.round(48 + 20 * Math.sin(i / 2 + 0.3) + rnd() * 12) : null)) },
+    ],
+  }, 'pulse');
+
+  // 4) Scatter (3 grupos como máximo para que los colores se distingan)
+  const grp = (cx, cy, n) => Array.from({ length: n }, () => [+(cx + noise(0.35)).toFixed(2), +(cy + noise(0.18)).toFixed(2)]);
+  demo('#c-scatter', {
+    type: 'scatter', animation: { enter: 'pop' }, title: 'EC frente a pH', subtitle: 'Lecturas por sala', lang: 'es', x: { type: 'linear' }, y: { zero: false },
+    series: [{ name: 'Sala A', data: grp(1.6, 5.8, 40) }, { name: 'Sala B', data: grp(2.1, 6.1, 40) }, { name: 'Sala C', data: grp(2.5, 5.95, 30) }],
+  }, 'dots');
+
+  // 5) Donut con los costes de la captura
+  demo('#c-donut', {
+    type: 'donut', animation: { enter: 'wave', easing: 'back', duration: 600 }, title: 'Nutrient Details', subtitle: 'Coste total por producto', lang: 'es', height: 260,
+    y: { format: (v) => '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
+    series: [{ name: 'Coste', data: [
+      { label: 'Pro Bloom', value: 375.32 }, { label: 'Pro Core', value: 226.62 }, { label: 'CLEANSE', value: 38.53 },
+      { label: 'Pro Balance', value: 15.40 }, { label: 'Pro Grow', value: 0.02 } ] }],
+  }, 'spinner');
+})();
+</script>
+</body></html>

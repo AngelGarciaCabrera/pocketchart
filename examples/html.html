@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PocketChart · Ejemplo HTML</title>
+  <style>
+    body { margin: 0; padding: 16px; font-family: system-ui, sans-serif; background: #f5f6f8; }
+    .card { max-width: 640px; margin: 0 auto 12px; background: #fff; border: 1px solid rgba(0,0,0,.08); border-radius: 14px; padding: 16px 14px; }
+    @media (prefers-color-scheme: dark) { body { background: #0e0f12; } .card { background: #15171b; border-color: rgba(255,255,255,.08); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <pocket-chart type="bar" title="Ventas mensuales" subtitle="Miles de USD" animation="wave" lang="es">
+      <script type="application/json">
+        {
+          "categories": ["Ene", "Feb", "Mar", "Abr", "May", "Jun"],
+          "series": [
+            { "name": "2025", "data": [40, 46, 52, 48, 55, 61] },
+            { "name": "2026", "data": [48, 51, 60, 57, 66, 70] }
+          ]
+        }
+      </script>
+    </pocket-chart>
+  </div>
+
+  <div class="card">
+    <pocket-chart id="donut" type="donut" title="Gasto por categoría" lang="es" loader="spinner" loading></pocket-chart>
+  </div>
+
+  <script src="../dist/pocketchart.min.js"></script>
+  <script>
+    // Simula una petición al servidor
+    setTimeout(() => {
+      const el = document.getElementById('donut');
+      el.config = { series: [{ name: 'Gasto', data: [
+        { label: 'Vivienda', value: 900 }, { label: 'Comida', value: 420 },
+        { label: 'Transporte', value: 260 }, { label: 'Ocio', value: 180 } ] }] };
+      el.removeAttribute('loading');
+    }, 1500);
+  </script>
+</body>
+</html>

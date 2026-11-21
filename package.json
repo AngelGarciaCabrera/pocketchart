@@ -1,0 +1,47 @@
+{
+  "name": "pocketchart",
+  "version": "0.3.0",
+  "description": "Gráficos mobile-first, ligeros y sin dependencias. Gestos táctiles, animaciones y personalización completa. Funciona en HTML, JavaScript, React, React Native, Vue, Angular y más.",
+  "type": "module",
+  "main": "dist/pocketchart.min.js",
+  "module": "dist/pocketchart.esm.js",
+  "exports": {
+    ".": {
+      "types": "./types/pocketchart.d.ts",
+      "import": "./dist/pocketchart.esm.js",
+      "default": "./dist/pocketchart.min.js"
+    },
+    "./react": "./integrations/react/PocketChart.jsx",
+    "./react-native": "./integrations/react-native/PocketChartView.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "types",
+    "integrations"
+  ],
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0"
+  },
+  "license": "MIT",
+  "types": "types/pocketchart.d.ts",
+  "keywords": [
+    "charts",
+    "mobile",
+    "touch",
+    "canvas",
+    "web-component",
+    "react",
+    "react-native",
+    "graficos"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AngelGarciaCabrera/pocketchart.git"
+  },
+  "author": "AngelGarciaCabrera",
+  "sideEffects": true
+}
