@@ -48,6 +48,7 @@ chart.load(() => fetch('/api/consumo').then((r) => r.json()));
 ```
 
 > La URL del CDN funciona cuando el repositorio está en GitHub con la etiqueta `v0.3.0`. Mientras tanto, usa `dist/pocketchart.min.js` directamente.
+> Para instalarlo npm install github:AngelGarciaCabrera/pocketchart#v0.3.0
 
 ## Guías paso a paso
 
