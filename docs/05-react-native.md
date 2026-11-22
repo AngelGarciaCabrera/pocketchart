@@ -80,9 +80,14 @@ export default function FeedScreen() {
 | `loading` | Muestra la animación de carga |
 | `background` | Color de fondo de la WebView (usa el de tu pantalla) |
 | `style` | Estilo del contenedor (márgenes, etc.). El alto se calcula solo. |
+| `keepView` | `true`: al cambiar `series` se conserva el zoom y la selección fija |
+| `zoomRange` | Zoom controlado `{ from, to }` |
 | `onInspect`, `onZoom`, `onToggle`, `onReady`, `onUpdated`, `onError` | Eventos |
+| `onZoomEnd` | Una vez al terminar cada gesto de zoom o pan: `{ from, to, zoomed, source }` |
+| `onInteractionStart`, `onInteractionEnd` | Para bloquear el scroll de la pantalla mientras se arrastra |
+| `onFullscreenRequest` | Con `fullscreen: 'external'`, para abrir tu propio Modal |
 | `onExport` | Recibe el archivo exportado (PNG, PDF, Excel). Ver *Paso 6* |
-| `ref` | `ref.current.resetZoom()`, `.replay()`, `.setLoading(true)`, `.export('pdf')`, `await .toImage()`, `await .toData()`, `.call('zoomTo', a, b)` |
+| `ref` | `ref.current.zoomTo(a, b)`, `.zoomBy(0.5)`, `.resetZoom()`, `await .getZoom()`, `.select(x)`, `.clearInspect()`, `.setData(series, { keepView: true })`, `.replay()`, `.setLoading(true)`, `.export('pdf')`, `await .toImage()`, `await .toData()` |
 
 ## Paso 4. Modo oscuro
 
@@ -200,6 +205,58 @@ Cada serie puede tener su propia escala con `yAxis`. Funciona igual que en la we
 ```
 
 `yAxis.format` viaja a la WebView como texto con el prefijo `fn:`, igual que `y.format`, así que tampoco puede usar variables de fuera de la función.
+
+## Zoom con datos del backend
+
+```jsx
+const [series, setSeries] = useState(inicial);
+const [scroll, setScroll] = useState(true);
+
+<ScrollView scrollEnabled={scroll}>
+  <PocketChartView
+    options={{ type: 'line', x: { format: 'MM/dd HH:mm' }, tooltip: { sticky: true }, inspector: 'bottom' }}
+    series={series}
+    keepView                                            // los datos nuevos no cambian el zoom
+    onZoomEnd={async ({ from, to }) => setSeries(await pedirDatos(from, to))}
+    onInteractionStart={() => setScroll(false)}         // sin scroll mientras se arrastra el gráfico
+    onInteractionEnd={() => setScroll(true)}
+  />
+</ScrollView>
+```
+
+`onZoomEnd` llega una sola vez al soltar el gesto. Para fijar el zoom desde la app usa la prop `zoomRange={{ from, to }}` o `ref.current.zoomTo(from, to)`. Otros métodos: `getZoom()`, `select(x)`, `clearInspect()`, `setData(series, { keepView: true })`.
+
+## Hermes: formatos sin funciones
+
+Con Hermes el texto de las funciones no se conserva y no puede viajar a la WebView. Usa los formatos declarativos (`format: 'compact'`, `'currency'`, `x.format: 'MM/dd HH:mm'`, `tooltip.template`). Si llega una función sin código, se descarta y recibes un aviso en `onError`.
+
+## Pantalla completa con tu propio Modal
+
+```jsx
+<PocketChartView options={{ ...opts, fullscreen: 'external' }} onFullscreenRequest={({ from, to }) => abrirModal({ from, to })} />
+// En el Modal: <PocketChartView options={opts} series={series} zoomRange={{ from, to }} />
+```
+
+El gráfico acepta cambios de tamaño (giro, Modal) sin recargar ni perder el zoom.
+
+## Varios gráficos en una pantalla
+
+`PocketChartGroup` carga la librería una sola vez para todos (por ejemplo, los 5 gráficos de Environments):
+
+```jsx
+import { PocketChartGroup } from './PocketChartView';
+
+<PocketChartGroup
+  charts={[{ key: 'temp', options: optsTemp, series: temp }, { key: 'hum', options: optsHum, series: hum }]}
+  onZoomEnd={(key, z) => recargar(key, z)}
+/>
+```
+
+Los eventos reciben `(key, datos)`; `ref.current.chart('temp')` da los mismos métodos que `PocketChartView`. Con `lite: true` en las opciones, cada gráfico entra sin animación y con menos resolución. Sin `lite`, los gráficos que aparecen juntos entran uno tras otro (`animation.chartStagger`).
+
+## Datos grandes
+
+Envía arreglos separados en lugar de pares: `{ name: 'Temp', x: fechas, y: valores }` (o `xStart` + `xStep` para datos regulares). Son casi la mitad de texto por el puente.
 
 ## Consejos de rendimiento
 

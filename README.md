@@ -27,7 +27,7 @@ Ligera (~21 KB gzip), **sin dependencias**, y funciona en HTML, JavaScript, Reac
 ## Empezar en 30 segundos
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/AngelGarciaCabrera/pocketchart@v0.7.0/dist/pocketchart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/AngelGarciaCabrera/pocketchart@v0.8.0/dist/pocketchart.min.js"></script>
 
 <pocket-chart type="line" title="Ventas" animation="draw">
   <script type="application/json">
@@ -49,8 +49,8 @@ const chart = PocketChart.create('#grafico', {
 chart.load(() => fetch('/api/consumo').then((r) => r.json()));
 ```
 
-> La URL del CDN funciona cuando el repositorio está en GitHub con la etiqueta `v0.7.0`. Mientras tanto, usa `dist/pocketchart.min.js` directamente.
-> Para instalarlo con npm: `npm install github:AngelGarciaCabrera/pocketchart#v0.7.0`
+> La URL del CDN funciona cuando el repositorio está en GitHub con la etiqueta `v0.8.0`. Mientras tanto, usa `dist/pocketchart.min.js` directamente.
+> Para instalarlo con npm: `npm install github:AngelGarciaCabrera/pocketchart#v0.8.0`
 
 ## Guías paso a paso
 
@@ -63,6 +63,7 @@ chart.load(() => fetch('/api/consumo').then((r) => r.json()));
 | 5 | [React Native](docs/05-react-native.md): componente `<PocketChartView />` con WebView, Expo y CLI |
 | 6 | [Vue, Angular, Svelte, Flutter y otros](docs/06-otros.md) |
 | 7 | [Referencia completa](docs/07-referencia.md): opciones, animaciones, estilo, gestos y rendimiento |
+| 8 | [Migrar los gráficos de la app](docs/08-migracion-rhythm.md): los 34 requisitos y la opción que resuelve cada uno |
 
 ## Gestos
 
@@ -93,7 +94,7 @@ npm run build      # genera dist/ e integrations/react-native/pocketchart-lib.js
 npx serve .        # abre http://localhost:3000/demo/ o /examples/
 ```
 
-Para publicar una versión: actualiza `version` en `package.json` y `CHANGELOG.md`, ejecuta `npm run build`, haz commit y crea la etiqueta (`git tag v0.7.0 && git push --tags`). jsDelivr la sirve sola desde GitHub.
+Para publicar una versión: actualiza `version` en `package.json` y `CHANGELOG.md`, ejecuta `npm run build`, haz commit y crea la etiqueta (`git tag v0.8.0 && git push --tags`). jsDelivr la sirve sola desde GitHub.
 
 ## Licencia
 

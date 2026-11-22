@@ -172,8 +172,8 @@ PocketChart.create('#grafico', {
 
 | Opción | Por defecto | Descripción |
 |---|---|---|
-| `type` | `'line'` | `line`, `area`, `bar`, `scatter`, `pie`, `donut`. Cada serie puede tener su propio `type` (mixtos) |
-| `series` | `[]` | `{ name, data, unit?, color?, type?, smooth?, stack?, format?, yAxis? }` |
+| `type` | `'line'` | `line`, `area`, `bar` (o `column`), `scatter`, `pie`, `donut`. Cada serie puede tener su propio `type` (mixtos) |
+| `series` | `[]` | `{ name, data, unit?, color?, type?, curve?, dash?, stack?, format?, yAxis? }`. `data` también puede ser compacto: `{ x: [...], y: [...] }` |
 | `toImage()`, `toData()` | | Imagen y datos del gráfico para tu propio PDF. Ver *Insertar el gráfico en el PDF de tu app* |
 | `export` | ver *Exportar* | Botón de descarga y formatos (PNG, PDF, Excel, CSV). `false` lo oculta |
 | `stack` | `false` | `true` apila barras, áreas y líneas; `'percent'` las apila al 100 %. Ver *Apilado* |
@@ -182,9 +182,10 @@ PocketChart.create('#grafico', {
 | `title`, `subtitle` | `''` | Cabecera |
 | `height` | `260` | Alto del área de dibujo (en pantalla completa ocupa todo) |
 | `x.type` | `'auto'` | `time`, `linear`, `category` (se detecta solo) |
-| `x.format(v, 'tick'\|'full')` | | Formato propio del eje X |
+| `x.format` | | Función `(v, 'tick'\|'full')` o plantilla de fecha `'MM/dd HH:mm'`. Ver *Formatos sin funciones* |
 | `y.min`, `y.max`, `y.zero` | auto | Límites; `zero` fuerza incluir el 0 (activo por defecto en barras y áreas) |
-| `y.format(v)` | | Formato de valores |
+| `y.format` | | Función o estilo declarativo (`'compact'`, `'currency'`…). Ver *Formatos sin funciones* |
+| `y.stable` | `false` | Ocultar una serie no cambia la escala (en ejes múltiples ya es así por defecto) |
 | `y.title` | | Texto encima del eje Y principal |
 | `series[].yAxis` | | `{ min?, max?, opposite?, show?, id?, format?, title?, zero? }`. Escala Y propia de la serie. Ver *Ejes Y múltiples* |
 | `legend.mode` | `'multi'` | `single` = una serie a la vez |
@@ -200,6 +201,16 @@ PocketChart.create('#grafico', {
 | `lang` | `'auto'` | `es`, `en` para textos de la interfaz |
 | `locale` | navegador | Formato de fechas y números |
 | `tooltip.format(sel)` | | Devuelve HTML propio para el tooltip |
+| `tooltip.template`, `header`, `footer`, `dateFormat` | | Plantillas de texto. Ver *Formatos sin funciones* |
+| `tooltip.sticky` | `false` | Un toque fija el valor hasta tocar de nuevo o `clearInspect()` |
+| `inspector` | `false` | `'bottom'`: panel con la fecha y el valor de cada serie bajo el gráfico |
+| `zoom` | `true` | También `{ minPoints: 4 }`: puntos visibles como mínimo al acercar |
+| `zoomControls` | `'auto'` | Botones − y + en la cabecera |
+| `rangeBar` | `'auto'` | Rango visible (inicio – fin) y botón "Restablecer" cuando hay zoom |
+| `zoomRange` | `null` | Zoom controlado `{ from, to }` |
+| `fullscreen` | `true` | `'external'`: emite `fullscreenRequest` para que tu app abra su modal |
+| `lite` | `false` | Modo ligero para pantallas con varios gráficos |
+| `bar.padding` | | Hueco libre entre barras (0..1); en ejes de tiempo el ancho sigue a la separación entre fechas |
 
 ## Exportar (PNG, PDF, Excel)
 
@@ -337,6 +348,53 @@ Reglas:
 - **Evento `inspect`:** con ejes múltiples, cada punto incluye `unit` y `yAxis: { id, min, max, opposite }`, con el dominio actual del eje.
 - **Sin `yAxis`** en ninguna serie, el gráfico es exactamente igual que antes (un solo eje).
 - `y.title` pone un título encima del eje principal también sin ejes múltiples.
+
+## Formatos sin funciones
+
+En React Native con Hermes las funciones no llegan a la WebView. Todo se puede declarar con texto:
+
+```js
+create('#nutrientes', {
+  type: 'column', stack: true,
+  x: { format: 'MM/dd' },                          // plantilla del eje X
+  y: { format: 'currency', decimals: 0 },           // $1,235
+  tooltip: {
+    dateFormat: 'hh:mm a, MM/dd/yy',                // fecha del tooltip
+    template: '{series}: {value} ({percent})',      // una fila por serie
+    footer: 'Total: {total}',
+  },
+  series: [
+    { name: 'Pro Bloom', format: 'compact', data },  // 1200 → 1.2k
+    { name: 'pH', dataType: 'decimal1', data },      // 5.83 → 5.8
+  ],
+});
+```
+
+| Formato numérico | Ejemplo |
+|---|---|
+| `'compact'` | 1200 → 1.2k, 2500000 → 2.5M |
+| `'integer'` / `'number'` | 1234.6 → 1,235 |
+| `'decimal'` (+ `decimals`) | 1234.5 → 1,234.50 |
+| `'decimal1'`, `'decimal2'` | Uno o dos decimales fijos |
+| `'percent'` | 45 → 45% (el valor ya viene en porcentaje) |
+| `'currency'` (+ `currency`, `decimals`) | 1234.5 → $1,234.50 |
+
+Junto a `format` puedes poner `decimals`, `prefix`, `suffix`, `locale` y `currency`, o `dataType: 'number' | 'decimal1' | 'decimal2'`. Vale en `y`, en cada `yAxis`, en cada serie y en `tooltip`. Prioridad en el tooltip: serie, luego tooltip, luego eje.
+
+Fechas: `yyyy yy MMMM MMM MM M dd d EEE HH H hh h mm m ss s a` y texto literal entre comillas simples. Si la plantilla del eje no distingue el paso al acercar (por ejemplo `'MM/dd HH:mm'` con 30 segundos), el eje pasa solo a `HH:mm:ss`.
+
+Plantillas del tooltip: `{x}`, `{series}`, `{value}`, `{unit}`, `{total}` y `{percent}`. Con `|` separas nombre y valor en dos columnas: `'{series}|{value} {unit}'`.
+
+## Zoom, rango y eventos
+
+- **Ejes fijos:** los ejes X e Y se dibujan fuera del área que se mueve. Con zoom, pan, pantalla completa o giro nunca se salen ni se cortan. Con muchos ejes en una pantalla estrecha, las etiquetas pasan a formato compacto. Si aun así no caben, sólo se dibujan los más cercanos al gráfico (los demás siguen en el tooltip). Hay una prueba automática que lo comprueba en 108 combinaciones de ancho, número de ejes y zoom.
+- **Pan limitado:** no se puede arrastrar fuera de los datos. `zoom.minPoints` fija el zoom mínimo y la vista nunca queda vacía en un hueco.
+- **Rango visible:** con zoom aparecen la barra "inicio – fin" con **Restablecer** y el mini-mapa.
+- **`zoomEnd`:** se emite **una vez** al terminar cada gesto: `{ from, to, zoomed, source }` (`pinch`, `pan`, `wheel`, `button`, `reset`, `doubletap`, `keyboard`, `navigator`, `api`). `zoom` sigue llegando en cada fotograma.
+- **Zoom controlado:** `zoomRange: { from, to }` y `chart.setData(series, { keepView: true })` (los datos nuevos no hacen saltar la vista).
+- **`interactionStart` / `interactionEnd`:** para bloquear el scroll de la pantalla mientras se arrastra el gráfico.
+- **Métodos:** `zoomTo(from, to)` (acepta fechas), `zoomBy(0.5)`, `resetZoom()`, `getZoom()`, `select(x)`, `clearInspect()`.
+- **Gestos:** pellizco y arrastre con Pointer Events y respaldo con eventos `touch*` si el navegador cancela los punteros.
 
 ## Personalizar el estilo
 

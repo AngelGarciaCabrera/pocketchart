@@ -24,6 +24,10 @@ const EVENTS = {
   onError: 'error',
   onVisible: 'visible',
   onExport: 'export',
+  onZoomEnd: 'zoomEnd',
+  onInteractionStart: 'interactionStart',
+  onInteractionEnd: 'interactionEnd',
+  onFullscreenRequest: 'fullscreenRequest',
 };
 
 // Clave estable de las opciones: las funciones (formatos) no cambian la clave,

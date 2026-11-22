@@ -1,5 +1,19 @@
 # Cambios
 
+## 0.8.0 — 2026-11-22
+- Ejes que nunca pierden el contexto: los ejes X e Y no se salen ni se encima ninguna etiqueta (probado en 108 combinaciones de ancho, ejes y zoom); con muchos ejes, etiquetas compactas.
+- Zoom: botones − y +, barra con el rango visible y "Restablecer", zoom mínimo (`zoom.minPoints`), vista nunca vacía, fechas sin ambigüedad al acercar.
+- Eventos `zoomEnd` (una vez por gesto, con `source`), `interactionStart` / `interactionEnd` y `fullscreenRequest` (`fullscreen: 'external'`).
+- Zoom controlado: `zoomRange` y `setData(series, { keepView: true })`. Métodos `zoomBy`, `getZoom`, `select`, `clearInspect`.
+- Tooltip fijo con un toque (`tooltip.sticky`) y panel de valores bajo el gráfico (`inspector: 'bottom'`).
+- Formatos sin funciones (Hermes): `format: 'compact' | 'integer' | 'decimal' | 'percent' | 'currency'` con `decimals`, `prefix`, `suffix`, `locale`, `currency` y `dataType`; plantillas de fecha (`x.format: 'MM/dd HH:mm'`, `tooltip.dateFormat`) y del tooltip (`{x} {series} {value} {unit} {total} {percent}`).
+- Datos: huecos con `null`/`NaN` sin conectar, series con fechas desiguales, datos compactos `{ x: [], y: [] }`, colores CSS con nombre, alias `column`, `straight`, `stepline`, líneas punteadas sin marcadores.
+- Barras en ejes de tiempo con ancho según la separación entre fechas y `bar.padding`.
+- `toImage({ view, aspectRatio, height })` y `toData({ range, series })`.
+- React Native: `PocketChartGroup` (varios gráficos en una WebView), props `keepView`, `zoomRange`, `onZoomEnd`, `onInteractionStart/End`, `onFullscreenRequest`; aviso si llega una función sin código (Hermes).
+- Modo `lite` y entrada escalonada de varios gráficos.
+- Guía nueva: docs/08-migracion-rhythm.md.
+
 ## 0.7.0 — 2026-11-22
 - Ejes Y múltiples: `yAxis: { min, max, opposite, show, id, format, title }` por serie, cada uno con su escala y del color de su serie.
 - Las series comparten eje por `id` o por mismo `min`/`max` y lado; varios ejes por lado se colocan uno junto a otro y el área se ajusta.

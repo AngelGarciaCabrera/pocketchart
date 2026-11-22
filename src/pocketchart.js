@@ -1,5 +1,5 @@
 /*!
- * PocketChart v0.3.0 — gráficos mobile-first, sin dependencias.
+ * PocketChart v0.8.0 — gráficos mobile-first, sin dependencias.
  * Canvas 2D + Pointer Events. Funciona en vanilla JS, como Web Component
  * (<pocket-chart>) y dentro de cualquier framework o WebView.
  */
@@ -15,17 +15,17 @@ const PALETTE = {
 
 const I18N = {
   en: {
-    reset: 'Reset zoom', fullscreen: 'Fullscreen', exit: 'Close',
+    reset: 'Reset zoom', fullscreen: 'Fullscreen', exit: 'Close', zoomIn: 'Zoom in', zoomOut: 'Zoom out', resetShort: 'Reset', tapHint: 'Tap the chart to see values',
     download: 'Download', category: 'Category', date: 'Date', png: 'Image (PNG)', pdf: 'PDF document', xlsx: 'Excel (.xlsx)', csv: 'CSV',
-    hintTouch: 'Pinch to zoom · Touch and hold to inspect',
+    hintTouch: 'Pinch to zoom · Tap to see values',
     hintMouse: 'Scroll with Ctrl to zoom · Drag to inspect',
     rotate: 'Rotate your phone for more room', total: 'Total', chart: 'Chart',
     loading: 'Loading…', error: 'Could not load the data', retry: 'Tap to retry',
   },
   es: {
-    reset: 'Restablecer zoom', fullscreen: 'Pantalla completa', exit: 'Cerrar',
+    reset: 'Restablecer zoom', fullscreen: 'Pantalla completa', exit: 'Cerrar', zoomIn: 'Acercar', zoomOut: 'Alejar', resetShort: 'Restablecer', tapHint: 'Toca el gráfico para ver los valores',
     download: 'Descargar', category: 'Categoría', date: 'Fecha', png: 'Imagen (PNG)', pdf: 'Documento PDF', xlsx: 'Excel (.xlsx)', csv: 'CSV',
-    hintTouch: 'Pellizca para hacer zoom · Mantén pulsado para inspeccionar',
+    hintTouch: 'Pellizca para hacer zoom · Toca para ver los valores',
     hintMouse: 'Ctrl + rueda para zoom · Arrastra para inspeccionar',
     rotate: 'Gira el teléfono para ver más', total: 'Total', chart: 'Gráfico',
     loading: 'Cargando…', error: 'No se pudieron cargar los datos', retry: 'Toca para reintentar',
@@ -44,17 +44,22 @@ const DEFAULTS = {
   smooth: true,
   stack: false,            // false | true (apiladas) | 'percent' (100 %). Cada serie puede usar `stack: 'grupo'` o `stack: false`
   legend: { show: 'auto', mode: 'multi' },        // mode: multi (varias a la vez) | single (una a la vez)
-  zoom: true,
+  zoom: true,              // true | false | { minPoints: 4 } (puntos visibles como mínimo al acercar)
   pan: true,
   navigator: 'auto',       // mini-mapa para navegar cuando hay zoom
-  fullscreen: true,
+  zoomControls: 'auto',    // botones − y + en la cabecera ('auto' = si hay zoom y no es pie/donut)
+  rangeBar: 'auto',        // barra con el rango visible y "Restablecer" ('auto' = sólo con zoom)
+  zoomRange: null,         // zoom controlado: { from, to } (números, fechas o textos de fecha)
+  inspector: false,        // 'bottom' = panel de valores bajo el gráfico
+  lite: false,             // modo ligero para pantallas con varios gráficos
+  fullscreen: true,        // true | false | 'external' (emite 'fullscreenRequest' para que la app abra su propio modal)
   hover: true,             // con ratón, inspeccionar al pasar por encima
   animate: true,
   theme: 'auto',           // auto | light | dark
   lang: 'auto',            // auto | es | en
   locale: null,            // para fechas y números (por defecto, el del navegador)
   hint: true,
-  tooltip: { format: null },
+  tooltip: { format: null, template: null, header: null, footer: null, dateFormat: null, sticky: false, show: 'auto' },
   /* --- Exportar --- */
   export: {
     button: true,          // botón de descarga en la cabecera
@@ -77,6 +82,7 @@ const DEFAULTS = {
     update: 450,           // ms de transición al cambiar datos (0 = sin transición)
     onVisible: true,       // espera a que el gráfico se vea en pantalla para animar la entrada
     replayOnView: false,   // repetir la entrada cada vez que el gráfico vuelve a verse
+    chartStagger: 120,     // ms entre las entradas de varios gráficos que aparecen a la vez
   },
   loading: false,          // true para empezar en estado de carga
   loader: { type: 'skeleton', text: null }, // skeleton | pulse | wave | spinner | dots
@@ -89,7 +95,7 @@ const DEFAULTS = {
   line: { width: 2, curve: 'smooth', dash: null },        // curve: smooth | linear | step
   markers: { show: 'auto', size: 3.5, shape: 'circle' }, // show: auto | true | false · shape: circle | square | diamond
   area: { opacity: 0.28 },
-  bar: { radius: 4, width: 0.7 },                         // width: fracción del hueco disponible
+  bar: { radius: 4, width: 0.7, padding: null },          // width: fracción del hueco disponible · padding: hueco libre (0..1), alternativa a width
   grid: { show: true, dashed: false },
   axis: { x: true, y: true },
   donut: { thickness: 0.38 },
@@ -180,6 +186,16 @@ padding:5px 10px;border-radius:8px;white-space:nowrap;pointer-events:none;opacit
 .pc-hint.pc-on{opacity:.85}
 .pc-nav{position:relative;height:34px;margin-top:8px;touch-action:none;cursor:grab;border-radius:6px;overflow:hidden}
 .pc-nav canvas{display:block;width:100%;height:100%}
+.pc-range{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--pc-muted);min-height:30px}
+.pc-range[hidden]{display:none}
+.pc-range-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.pc-range .pc-btn{height:30px;font-size:12.5px;color:var(--pc-fg);background:var(--pc-chip);padding:0 10px}
+.pc-range .pc-btn svg{width:14px;height:14px}
+.pc-insp{margin-top:8px;border-top:1px solid var(--pc-line);padding-top:8px;font-size:12.5px}
+.pc-insp[hidden]{display:none}
+.pc-insp-h{font-size:11.5px;font-weight:500;color:var(--pc-muted);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-insp-g{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:2px 12px}
+.pc-insp .pc-tip-r{min-width:0}
 .pc-rotate{display:none;text-align:center;font-size:12px;color:var(--pc-muted);padding:6px 0 0}
 .pc-root.pc-fs{position:fixed;inset:0;z-index:2147483000;border-radius:0;display:flex;flex-direction:column;
 padding:max(12px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left))}
@@ -195,6 +211,8 @@ const ICONS = {
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
   reset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>',
 };
 
 /* ------------------------------------------------------------------ */
@@ -297,6 +315,134 @@ const canvasBlob = (c, type, q) => new Promise((res, rej) => c.toBlob((b) => (b 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const reduceMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+/* ---------- Alias del backend ---------- */
+const TYPE_ALIAS = { column: 'bar', columns: 'bar', bars: 'bar', spline: 'line', areaspline: 'area', points: 'scatter' };
+const CURVE_ALIAS = { smooth: 'smooth', monotone: 'smooth', spline: 'smooth', curved: 'smooth', linear: 'linear', straight: 'linear', step: 'step', stepline: 'step', stepped: 'step' };
+const normType = (t) => (t && TYPE_ALIAS[t]) || t;
+const normCurve = (c) => (c && CURVE_ALIAS[c]) || null;
+
+/* ---------- Colores con nombre CSS (blue, red, grey…) → #rrggbb ---------- */
+let COLOR_CTX = null;
+const COLOR_CACHE = new Map();
+function toHex(c) {
+  if (typeof c !== 'string') return c;
+  const k = c.trim();
+  if (/^#[0-9a-f]{6}$/i.test(k)) return k;
+  if (COLOR_CACHE.has(k)) return COLOR_CACHE.get(k);
+  let out = k;
+  try {
+    if (!COLOR_CTX && typeof document !== 'undefined') COLOR_CTX = document.createElement('canvas').getContext('2d');
+    if (COLOR_CTX) { COLOR_CTX.fillStyle = '#000000'; COLOR_CTX.fillStyle = k; out = COLOR_CTX.fillStyle; }
+  } catch (e) { /* sin canvas: se deja tal cual */ }
+  COLOR_CACHE.set(k, out);
+  return out;
+}
+
+/* ---------- Formato numérico declarativo (sin funciones: funciona con Hermes) ----------
+ * format: 'compact' | 'integer' | 'number' | 'decimal' | 'decimal1' | 'decimal2' | 'percent' | 'currency'
+ * más decimals, prefix, suffix, locale, currency. También `dataType: 'number' | 'decimal1' | 'decimal2'`. */
+const NUM_STYLES = ['compact', 'integer', 'number', 'decimal', 'decimal1', 'decimal2', 'percent', 'currency'];
+const DATA_TYPES = { number: 0, integer: 0, decimal1: 1, decimal2: 2 };
+function numSpec(o) {
+  if (!o || typeof o !== 'object') return null;
+  const f = o.format;
+  if (isObj(f)) return { ...f, style: f.style || f.type || 'decimal' };
+  const str = typeof f === 'string' && NUM_STYLES.includes(f) ? f : null;
+  const dt = o.dataType ?? o.round;
+  if (!str && dt == null && o.decimals == null && o.prefix == null && o.suffix == null && o.currency == null) return null;
+  return { style: str || (dt != null ? 'decimal' : 'auto'), decimals: o.decimals ?? (dt != null ? DATA_TYPES[dt] : undefined), prefix: o.prefix, suffix: o.suffix, locale: o.locale, currency: o.currency };
+}
+const NF_CACHE = new Map();
+function numFormatter(spec, locale) {
+  const key = JSON.stringify(spec) + '|' + locale;
+  let f = NF_CACHE.get(key);
+  if (f) return f;
+  const st = spec.style, loc = spec.locale || locale || undefined, pre = spec.prefix || '', suf = spec.suffix || '';
+  const nf = (o) => { try { return new Intl.NumberFormat(loc, o); } catch (e) { return new Intl.NumberFormat(undefined, o); } };
+  if (st === 'currency') {
+    const d = spec.decimals ?? 2, n = nf({ style: 'currency', currency: spec.currency || 'USD', minimumFractionDigits: d, maximumFractionDigits: d });
+    f = (v) => pre + n.format(v) + suf;
+  } else if (st === 'compact') {
+    const n = nf({ maximumFractionDigits: spec.decimals ?? 1 });
+    f = (v) => {
+      const a = Math.abs(v);
+      const [k, u] = a >= 1e12 ? [1e12, 'T'] : a >= 1e9 ? [1e9, 'B'] : a >= 1e6 ? [1e6, 'M'] : a >= 1e3 ? [1e3, 'k'] : [1, ''];
+      return pre + n.format(v / k) + u + suf;
+    };
+  } else if (st === 'auto') {
+    const ns = [0, 1, 2].map((d) => nf({ maximumFractionDigits: d }));
+    f = (v) => { const a = Math.abs(v); return pre + (a >= 100 ? ns[0] : a >= 10 ? ns[1] : ns[2]).format(v) + suf; };
+  } else {
+    const fixed = st === 'decimal' || st === 'decimal1' || st === 'decimal2';
+    const d = spec.decimals ?? (st === 'decimal1' ? 1 : st === 'decimal2' ? 2 : st === 'decimal' ? 2 : 0);
+    const n = nf({ minimumFractionDigits: fixed ? d : 0, maximumFractionDigits: d });
+    f = st === 'percent' ? (v) => pre + n.format(v) + '%' + suf : (v) => pre + n.format(v) + suf;
+  }
+  NF_CACHE.set(key, f);
+  return f;
+}
+
+/* ---------- Fechas con plantilla: 'MM/dd HH:mm', 'hh:mm a, MM/dd/yy', 'dd MMM yyyy'… ---------- */
+const DATE_TOKENS = /'[^']*'|yyyy|yy|MMMM|MMM|MM|M|dd|d|EEEE|EEE|HH|H|hh|h|mm|m|ss|s|SSS|a/g;
+const MONTH_NAMES = new Map();
+function monthName(m, long, locale) {
+  const k = (locale || '') + (long ? 'L' : 'S');
+  let arr = MONTH_NAMES.get(k);
+  if (!arr) {
+    let df; try { df = new Intl.DateTimeFormat(locale, { month: long ? 'long' : 'short' }); } catch (e) { df = new Intl.DateTimeFormat(undefined, { month: long ? 'long' : 'short' }); }
+    arr = Array.from({ length: 12 }, (_, i) => df.format(new Date(2026, i, 15)).replace('.', ''));
+    MONTH_NAMES.set(k, arr);
+  }
+  return arr[m];
+}
+function dayName(d, long, locale) {
+  try { return new Intl.DateTimeFormat(locale, { weekday: long ? 'long' : 'short' }).format(d).replace('.', ''); } catch (e) { return ''; }
+}
+const p2 = (n) => (n < 10 ? '0' : '') + n;
+function fmtDate(t, pat, locale) {
+  const d = new Date(t);
+  if (isNaN(d)) return '';
+  return pat.replace(DATE_TOKENS, (k) => {
+    switch (k) {
+      case 'yyyy': return String(d.getFullYear());
+      case 'yy': return p2(d.getFullYear() % 100);
+      case 'MMMM': return monthName(d.getMonth(), true, locale);
+      case 'MMM': return monthName(d.getMonth(), false, locale);
+      case 'MM': return p2(d.getMonth() + 1);
+      case 'M': return String(d.getMonth() + 1);
+      case 'dd': return p2(d.getDate());
+      case 'd': return String(d.getDate());
+      case 'EEEE': return dayName(d, true, locale);
+      case 'EEE': return dayName(d, false, locale);
+      case 'HH': return p2(d.getHours());
+      case 'H': return String(d.getHours());
+      case 'hh': return p2(d.getHours() % 12 || 12);
+      case 'h': return String(d.getHours() % 12 || 12);
+      case 'mm': return p2(d.getMinutes());
+      case 'm': return String(d.getMinutes());
+      case 'ss': return p2(d.getSeconds());
+      case 's': return String(d.getSeconds());
+      case 'SSS': return String(d.getMilliseconds()).padStart(3, '0');
+      case 'a': return d.getHours() < 12 ? 'AM' : 'PM';
+      default: return k.slice(1, -1); // texto literal entre comillas simples
+    }
+  });
+}
+/** Resolución de una plantilla de fecha: el paso más fino que distingue (ms). */
+function dateRes(pat) {
+  const p = pat.replace(/'[^']*'/g, '');
+  if (/s/.test(p)) return 1e3;
+  if (/m/.test(p)) return 6e4;
+  if (/[Hh]/.test(p)) return 36e5;
+  if (/[dE]/.test(p)) return 864e5;
+  if (/M/.test(p)) return 28 * 864e5;
+  return 365 * 864e5;
+}
+/** Convierte from/to de un rango (número, Date o texto de fecha) a número. */
+const toNum = (v) => (v instanceof Date ? v.getTime() : typeof v === 'string' ? (isNaN(+v) ? Date.parse(v) : +v) : +v);
+/** Entrada escalonada de varios gráficos que aparecen a la vez. */
+let ENTER_LAST = -Infinity;
+
 function niceStep(span, count) {
   const raw = span / Math.max(1, count);
   const mag = Math.pow(10, Math.floor(Math.log10(raw)));
@@ -372,6 +518,7 @@ export class PocketChart {
     injectStyles(el);
     this._build();
     this._ingest();
+    if (this.opts.zoomRange) this._applyZoomRange(this.opts.zoomRange);
     this._resolveTheme();
     this._bind();
     this._resize();
@@ -382,14 +529,18 @@ export class PocketChart {
   off(evt, fn) { this._handlers[evt] = (this._handlers[evt] || []).filter((f) => f !== fn); return this; }
   _emit(evt, data) { (this._handlers[evt] || []).forEach((f) => f(data)); this.root.dispatchEvent(new CustomEvent('pocket:' + evt, { detail: data, bubbles: true, composed: true })); }
 
-  update(options = {}) {
-    const keepView = !options.series && !options.type;
+  update(options = {}, uo = {}) {
+    if ('keepView' in options) { uo = { ...uo, keepView: options.keepView }; options = { ...options }; delete options.keepView; }
+    const keepView = uo.keepView ?? (!options.series && !options.type);
     const prev = options.series && !this._loading ? this._snapshot() : null;
     const wasLoading = !!this._loading;
+    const selX = this._inspect && !this._isPie ? this._inspect.x : null;
     this.opts = merge(this.opts, options);
-    const view = this._view;
+    const view = this._view, zeLast = this._zeLast;
     this._ingest();
-    if (keepView && view) this._view = view;
+    if (keepView && view) { this._view = this._clampView(view); this._zeLast = zeLast; } // datos nuevos sin saltos ni perder el zoom
+    if (options.zoomRange) this._applyZoomRange(options.zoomRange);
+    if (selX != null && keepView && this.opts.tooltip.sticky) this._pendingSel = selX; // la selección fija sobrevive a los datos nuevos
     if (options.series) {
       this._error = null;
       if (wasLoading && !options.loading) { this._loading = null; this.root.removeAttribute('aria-busy'); this._enterPending = true; }
@@ -405,7 +556,15 @@ export class PocketChart {
     this._resize();
     return this;
   }
-  setData(series) { return this.update({ series }); }
+  /** `uo.keepView: true` conserva el zoom (y la selección fija) al llegar datos nuevos. */
+  setData(series, uo = {}) { return this.update({ series }, uo); }
+  _applyZoomRange(z) {
+    const a = toNum(z.from ?? z[0]), b = toNum(z.to ?? z[1]);
+    if (!isFinite(a) || !isFinite(b)) return;
+    this._view = this._clampView([Math.min(a, b), Math.max(a, b)]);
+    this._zeLast = this._view.slice(); // zoom controlado: no se notifica de vuelta
+    this._renderHeader(); this._layoutNav(); this.invalidate();
+  }
 
   /** Muestra (o quita) el estado de carga. `opts`: { type, text }. */
   setLoading(on = true, opts = {}) {
@@ -459,8 +618,12 @@ export class PocketChart {
     if (this._anim.onVisible !== false && !this._visible && !force) return; // se lanzará al entrar en pantalla
     this._enterPending = false;
     const a = this._anim;
-    if (!this._animOn || a.enter === 'none') { this._enter = null; this._emit('ready'); this._showHint(); this.invalidate(); return; }
-    this._enter = { t0: performance.now() };
+    if (!this._animOn || a.enter === 'none' || this.opts.lite) { this._enter = null; this._emit('ready'); this._showHint(); this.invalidate(); return; }
+    // Varios gráficos que aparecen a la vez entran uno detrás de otro (más fluido y se lee mejor).
+    const now = performance.now(), gap = a.chartStagger ?? 120;
+    const t0 = force || !gap ? now : Math.max(now, ENTER_LAST + gap);
+    if (!force) ENTER_LAST = t0;
+    this._enter = { t0 };
     this._loop();
   }
 
@@ -518,21 +681,47 @@ export class PocketChart {
 
   /** Bucle de animación mientras haya carga, entrada o transición en curso. */
   _loop() { this.invalidate(); }
-  resetZoom() { this.zoomTo(this._full[0], this._full[1]); }
-  zoomTo(a, b, animate = true) {
-    const [f0, f1] = this._full;
-    const span = clamp(b - a, this._minSpan, f1 - f0);
-    let v0 = clamp(a, f0, f1 - span);
-    const target = [v0, v0 + span];
-    if (!animate || reduceMotion()) { this._setView(target); return; }
+  resetZoom(source) { this.zoomTo(this._full[0], this._full[1], true, typeof source === 'string' ? source : 'reset'); return this; }
+  /** Acerca (k < 1) o aleja (k > 1) alrededor del centro de la vista. */
+  zoomBy(k, source = 'api') {
+    const [a, b] = this._view, c = (a + b) / 2, h = (b - a) * k / 2;
+    this.zoomTo(c - h, c + h, true, source); return this;
+  }
+  /** Rango visible actual: { from, to, zoomed }. */
+  getZoom() { return { from: this._view[0], to: this._view[1], zoomed: !!this.isZoomed }; }
+  /** `a` y `b` aceptan números, fechas o textos de fecha. */
+  zoomTo(a, b, animate = true, source = 'api') {
+    a = toNum(a); b = toNum(b);
+    if (!isFinite(a) || !isFinite(b)) return this;
+    const target = this._clampView([Math.min(a, b), Math.max(a, b)]);
+    cancelAnimationFrame(this._zoomRaf);
+    if (!animate || reduceMotion()) { this._setView(target); this._zoomEnd(source); return this; }
     const from = this._view.slice(), t0 = performance.now();
     const step = (now) => {
       const k = Math.min(1, (now - t0) / 260), e = 1 - Math.pow(1 - k, 3);
       this._setView([from[0] + (target[0] - from[0]) * e, from[1] + (target[1] - from[1]) * e]);
-      if (k < 1) this._zoomRaf = requestAnimationFrame(step);
+      if (k < 1) this._zoomRaf = requestAnimationFrame(step); else this._zoomEnd(source);
     };
-    cancelAnimationFrame(this._zoomRaf);
     this._zoomRaf = requestAnimationFrame(step);
+    return this;
+  }
+  /** Un solo evento 'zoomEnd' al terminar cada gesto o animación (para pedir datos al backend). */
+  _zoomEnd(source) {
+    const v = this._view, l = this._zeLast, eps = (this._full[1] - this._full[0]) * 1e-9;
+    if (l && Math.abs(l[0] - v[0]) <= eps && Math.abs(l[1] - v[1]) <= eps) return;
+    this._zeLast = v.slice();
+    this._emit('zoomEnd', { from: v[0], to: v[1], zoomed: !!this.isZoomed, source });
+  }
+  /** Quita la selección (tooltip fijo y panel de valores). */
+  clearInspect() { this._clearInspect(); return this; }
+  /** Selecciona el punto más cercano a `x` (número, fecha o índice de categoría), como si se tocara. */
+  select(x) {
+    x = toNum(x);
+    if (!this._plotRect || this._enterPending) { this._pendingSel = x; return this; }
+    if (x < this._view[0] || x > this._view[1]) { const h = (this._view[1] - this._view[0]) / 2; this._setView([x - h, x + h]); }
+    const hit = this._hitAtX(x);
+    if (hit) this._applyInspect(hit, this._plotRect.y + 10, false);
+    return this;
   }
   setSeriesVisible(key, visible) {
     const was = new Set(this._hidden);
@@ -643,8 +832,7 @@ export class PocketChart {
     scale = scale || EX.scale || 3;
     const pad = io.padding ?? 16, font = C.font;
     // Ancho total pedido → ancho del área de dibujo. El alto es el del gráfico (o `plotHeight`).
-    const W = io.width ? Math.max(120, io.width - pad * 2) : this.$canvas._w, H = io.plotHeight || this.$canvas._h;
-    const plot = this._snapshotCanvas(scale, W, H);
+    const W = io.width ? Math.max(120, io.width - pad * 2) : this.$canvas._w;
     const mc = document.createElement('canvas').getContext('2d');
     // Leyenda: elementos visibles, en varias líneas si hace falta
     const items = this._legendItems().filter((it) => !this._hidden.has(it.key));
@@ -661,7 +849,16 @@ export class PocketChart {
     const titleH = o.title ? 22 : 0, subH = o.subtitle ? 18 : 0;
     const head = titleH + subH + (titleH || subH ? 10 : 0);
     const legH = lines.length * 22 + (lines.length ? 8 : 0);
-    const TW = W + pad * 2, TH = pad + head + legH + H + pad;
+    const TW = W + pad * 2;
+    // Alto total fijo (`height`) o relación de aspecto fija (`aspectRatio` = ancho / alto) para el PDF de la app.
+    const fixedH = io.height || (io.aspectRatio ? TW / io.aspectRatio : 0);
+    const H = fixedH ? Math.max(80, fixedH - pad * 2 - head - legH) : io.plotHeight || this.$canvas._h;
+    const TH = fixedH ? Math.max(fixedH, pad * 2 + head + legH + 80) : pad + head + legH + H + pad;
+    // `view: 'full'` = todo el rango de datos aunque haya zoom; 'current' (por defecto) = lo que se ve.
+    const keepView = this._view;
+    if (io.view === 'full') this._view = this._full.slice();
+    let plot;
+    try { plot = this._snapshotCanvas(scale, W, H); } finally { this._view = keepView; }
     const out = document.createElement('canvas');
     out.width = Math.round(TW * scale); out.height = Math.round(TH * scale);
     const ctx = out.getContext('2d'); ctx.scale(scale, scale);
@@ -686,19 +883,22 @@ export class PocketChart {
   }
 
   /** Tabla de datos (la misma que se exporta a Excel y CSV). */
-  _dataRows() {
+  _dataRows(opt = {}) {
     if (this._isPie) {
       const s = this._series[0];
       return [[{ v: this.t.category, t: 's' }, { v: s?.name || this.t.total, t: 's' }], ...this._pie.map((p) => [{ v: p.label, t: 's' }, { v: p.value, t: 'n' }])];
     }
+    // range: 'all' (por defecto) | 'visible' (sólo el rango con zoom) · series: 'all' | 'visible'
+    const sers = opt.series === 'visible' ? this._visibleSeries() : this._series;
+    const [v0, v1] = opt.range === 'visible' ? this._view : [-Infinity, Infinity];
     const xs = new Map();
-    this._series.forEach((s) => s.points.forEach((q) => xs.set(q.x, true)));
+    sers.forEach((s) => s.points.forEach((q) => { if (q.x >= v0 && q.x <= v1) xs.set(q.x, true); }));
     const keys = [...xs.keys()].sort((a, b) => a - b);
-    const look = this._series.map((s) => { const m = new Map(); s.points.forEach((q) => m.set(q.x, q.v)); return m; });
+    const look = sers.map((s) => { const m = new Map(); s.points.forEach((q) => m.set(q.x, q.v)); return m; });
     const xCell = (x) => this._xType === 'time' ? { v: 25569 + (x - new Date(x).getTimezoneOffset() * 6e4) / 864e5, t: 'd', raw: x }
       : this._xType === 'category' ? { v: this._cats[x] ?? String(x), t: 's' } : { v: x, t: 'n' };
     const head = [{ v: this.opts.x.label || (this._xType === 'time' ? this.t.date : this._xType === 'category' ? this.t.category : 'X'), t: 's' },
-      ...this._series.map((s) => ({ v: s.unit ? `${s.name} (${s.unit})` : s.name, t: 's' }))];
+      ...sers.map((s) => ({ v: s.unit ? `${s.name} (${s.unit})` : s.name, t: 's' }))];
     return [head, ...keys.map((x, i) => [xCell(x), ...look.map((m) => ({ v: m.get(x), t: 'n' }))])];
   }
 
@@ -721,10 +921,10 @@ export class PocketChart {
    * Devuelve { columns, rows, formatted }: `rows` con valores reales (fechas como Date),
    * `formatted` con los mismos datos ya formateados como texto (como en el tooltip).
    */
-  toData() {
-    const t = this._dataRows(), head = t[0];
+  toData(opt = {}) {
+    const t = this._dataRows(opt), head = t[0];
     const valueOf = (c) => (c == null || c.v == null ? null : c.t === 'd' ? new Date(c.raw) : c.v);
-    const sers = this._isPie ? [this._series[0]] : this._series;
+    const sers = this._isPie ? [this._series[0]] : opt.series === 'visible' ? this._visibleSeries() : this._series;
     const rows = t.slice(1).map((r) => r.map(valueOf));
     const formatted = t.slice(1).map((r) => r.map((c, i) => {
       if (i === 0) return c.t === 'd' ? this._fmtXFull(c.raw) : c.t === 'n' ? this._nf(4).format(c.v) : String(c.v ?? '');
@@ -764,7 +964,7 @@ export class PocketChart {
       const s = EX.scale || 3;
       return buildPdf(jpeg, img.width / s, img.height / s, { ...DEFAULTS.export.pdf, ...(EX.pdf || {}), _pxW: img.width, _pxH: img.height }, this.opts.title);
     }
-    const rows = this._dataRows();
+    const rows = this._dataRows(EX);
     if (format === 'xlsx') {
       const widths = rows[0].map((_, i) => clamp(Math.max(...rows.slice(0, 200).map((r) => (r[i] && r[i].t === 'd' ? 17 : String(r[i]?.v ?? '').length + 2))), 8, 40));
       return buildXlsx(this.opts.title || this.t.chart, rows, widths);
@@ -792,6 +992,8 @@ export class PocketChart {
       <div class="pc-head"><div class="pc-titles"></div><div class="pc-actions"></div></div>
       <div class="pc-legend" role="group"></div>
       <div class="pc-plot" tabindex="0"><canvas role="img"></canvas><div class="pc-tip" aria-hidden="true"></div><div class="pc-hint"></div></div>
+      <div class="pc-insp" hidden aria-live="polite"></div>
+      <div class="pc-range" hidden><span class="pc-range-t"></span><button class="pc-btn" data-act="reset"></button></div>
       <div class="pc-nav" hidden><canvas aria-hidden="true"></canvas></div>
       <div class="pc-rotate"></div>
       <table class="pc-sr"></table>`;
@@ -807,6 +1009,9 @@ export class PocketChart {
     this.$nav = r.querySelector('.pc-nav');
     this.$navCanvas = this.$nav.querySelector('canvas');
     this.$rotate = r.querySelector('.pc-rotate');
+    this.$insp = r.querySelector('.pc-insp');
+    this.$range = r.querySelector('.pc-range');
+    this.$rangeT = r.querySelector('.pc-range-t');
     this.$table = r.querySelector('.pc-sr');
     this.ctx = this.$canvas.getContext('2d');
     this.navCtx = this.$navCanvas.getContext('2d');
@@ -817,13 +1022,18 @@ export class PocketChart {
     this.$titles.innerHTML = (o.title ? `<h3 class="pc-title">${esc(o.title)}</h3>` : '') + (o.subtitle ? `<p class="pc-sub">${esc(o.subtitle)}</p>` : '');
     const fs = this.root.classList.contains('pc-fs');
     let html = '';
-    if (this.isZoomed && !this._isPie) html += `<button class="pc-btn" data-act="reset" aria-label="${t.reset}" title="${t.reset}">${ICONS.reset}</button>`;
+    const zc = !this._isPie && o.zoom && (o.zoomControls === true || o.zoomControls === 'auto');
+    if (zc) html += `<button class="pc-btn" data-act="zout" aria-label="${t.zoomOut}" title="${t.zoomOut}"${this.isZoomed ? '' : ' disabled style="opacity:.35"'}>${ICONS.minus}</button><button class="pc-btn" data-act="zin" aria-label="${t.zoomIn}" title="${t.zoomIn}">${ICONS.plus}</button>`;
+    if (this.isZoomed && !this._isPie && !this._rangeOn) html += `<button class="pc-btn" data-act="reset" aria-label="${t.reset}" title="${t.reset}">${ICONS.reset}</button>`;
     const EX = this._exportOpts;
     if (EX && EX.button !== false && EX.formats.length) html += `<button class="pc-btn" data-act="dl" aria-haspopup="menu" aria-label="${t.download}" title="${t.download}">${ICONS.download}</button>`;
     if (o.fullscreen) html += `<button class="pc-btn" data-act="fs" aria-label="${fs ? t.exit : t.fullscreen}" title="${fs ? t.exit : t.fullscreen}">${fs ? ICONS.close : ICONS.expand}</button>`;
     if (html !== this._actionsHtml) { this.$actions.innerHTML = html; this._actionsHtml = html; }
     this.root.querySelector('.pc-head').hidden = !o.title && !o.subtitle && !html;
     this.$rotate.textContent = t.rotate;
+    this.$range.querySelector('.pc-btn').innerHTML = `${ICONS.reset}<span>${esc(t.resetShort)}</span>`;
+    this.$range.querySelector('.pc-btn').setAttribute('aria-label', t.reset);
+    this.$insp.hidden = this.opts.inspector !== 'bottom' || this._isPie;
     this.$canvas.setAttribute('aria-label', [o.title || t.chart, o.subtitle].filter(Boolean).join('. '));
   }
 
@@ -848,10 +1058,21 @@ export class PocketChart {
   _ingest() {
     const o = this.opts;
     this._isPie = o.type === 'pie' || o.type === 'donut';
-    const raw = (o.series || []).map((s) => (Array.isArray(s) ? { data: s } : s));
+    this._type = normType(o.type);
+    // Datos compactos: { x: [...], y: [...] } (o xStart + xStep) en lugar de pares; mucho menos texto por el puente de una WebView.
+    const compact = (s) => {
+      const D = isObj(s.data) && s.data.y ? s.data : s.y && s.y.length != null && !s.data ? s : null;
+      if (!D) return s;
+      const ys = D.y, xs = D.x, n = ys.length, x0 = D.xStart != null ? toNum(D.xStart) : 0, dx = D.xStep ?? 1;
+      const data = new Array(n);
+      for (let i = 0; i < n; i++) data[i] = [xs ? xs[i] : D.xStart != null ? x0 + i * dx : i, ys[i]];
+      if (!xs && D.xStart == null) for (let i = 0; i < n; i++) data[i] = ys[i];
+      return { ...s, data };
+    };
+    const raw = (o.series || []).map((s) => (Array.isArray(s) ? { data: s } : compact(s)));
     // Tipo de eje X
     let xType = o.x.type;
-    const sample = raw[0]?.data?.find((d) => d != null);
+    const sample = raw.map((r) => r.data && r.data.find && r.data.find((d) => d != null)).find((d) => d != null);
     const sx = sample == null ? null : typeof sample === 'number' ? null : Array.isArray(sample) ? sample[0] : sample.x;
     if (xType === 'auto') {
       if (o.categories) xType = 'category';
@@ -883,17 +1104,25 @@ export class PocketChart {
         else if (Array.isArray(d)) { x = d[0]; y = d[1]; r = d[2]; }
         else { x = d.x ?? d.label ?? d.name ?? i; y = d.y ?? d.value; label = d.label ?? d.name; r = d.r; }
         x = d == null || typeof d === 'number' ? i : toX(x, i);
-        const yy = y == null || isNaN(+y) ? null : +y;
+        // Huecos: null, undefined, NaN o texto no numérico cortan la línea; nunca se convierten en 0.
+        const yy = y == null || y === '' || isNaN(+y) || !isFinite(+y) ? null : +y;
         return { x, y: yy, v: yy, label, r, raw: d, i };
       }).filter((p) => isFinite(p.x));
       if (xType !== 'category') pts.sort((a, b) => a.x - b.x);
+      // Separación mínima entre puntos de esta serie (ancho de barras en ejes de tiempo, tolerancia del tooltip).
+      let sdx = Infinity;
+      for (let i = 1; i < pts.length; i++) { const dd = pts[i].x - pts[i - 1].x; if (dd > 0 && dd < sdx) sdx = dd; }
+      const sm = s.smooth ?? s.curveType;
+      const curve = normCurve(s.curve) || normCurve(typeof sm === 'string' ? sm : null) || (sm === false || (sm == null && o.smooth === false) ? 'linear' : normCurve(o.line && o.line.curve) || 'smooth');
       return {
         key: s.id != null ? String(s.id) : 's' + si,
         name: s.name ?? `Serie ${si + 1}`,
-        type: s.type || (this._isPie ? 'line' : o.type),
-        color: s.color || null,
+        type: normType(s.type) || (this._isPie ? 'line' : this._type),
+        color: s.color ? toHex(s.color) : null,
         slot: si,
-        curve: s.curve || ((s.smooth ?? o.smooth) === false ? 'linear' : (o.line && o.line.curve) || 'smooth'),
+        _dx: sdx,
+        num: numSpec(s),
+        curve,
         lineWidth: s.lineWidth, dash: s.dash, fillOpacity: s.fillOpacity, markers: s.markers, radius: s.radius,
         stackOpt: s.stack,
         yAxisOpt: isObj(s.yAxis) ? s.yAxis : null,
@@ -923,14 +1152,23 @@ export class PocketChart {
       for (let i = 1; i < p.length; i++) { const d = p[i].x - p[i - 1].x; if (d > 0 && d < minDx) minDx = d; }
     });
     if (!isFinite(x0)) { x0 = 0; x1 = 1; }
-    if (!isFinite(minDx)) minDx = (x1 - x0) || 1;
+    const tUnit = xType === 'time' ? 36e5 : 1; // con un solo punto en un eje de tiempo: una hora de margen
+    if (!isFinite(minDx)) minDx = (x1 - x0) || tUnit;
     this._minDx = minDx;
-    const hasBars = this._series.some((s) => s.type === 'bar');
-    if (xType === 'category' || hasBars) { x0 -= minDx / 2; x1 += minDx / 2; }
-    if (x1 === x0) { x0 -= 1; x1 += 1; }
+    const barS = this._series.filter((s) => s.type === 'bar');
+    // Barras: el ancho sigue a la separación entre fechas de las propias barras (no a la de una línea densa).
+    const bdx = barS.reduce((m, s) => Math.min(m, s._dx), Infinity);
+    this._barDx = xType === 'category' ? 1 : isFinite(bdx) ? bdx : minDx;
+    this._series.forEach((s) => { if (!isFinite(s._dx)) s._dx = s.type === 'bar' ? this._barDx : minDx; });
+    if (xType === 'category' || barS.length) { const h = xType === 'category' ? minDx / 2 : this._barDx / 2; x0 -= h; x1 += h; }
+    if (x1 === x0) { x0 -= tUnit; x1 += tUnit; }
     this._full = [x0, x1];
-    this._minSpan = Math.max((x1 - x0) / 2000, minDx * 2.5);
+    // Zoom mínimo: siempre quedan a la vista al menos `zoom.minPoints` puntos.
+    const Z = isObj(o.zoom) ? o.zoom : {};
+    const minPts = Math.max(2, Z.minPoints ?? 4);
+    this._minSpan = Math.min(x1 - x0, Math.max((x1 - x0) / 1e5, minDx * (minPts - 1), Z.minSpan || 0));
     this._view = [x0, x1];
+    this._zeLast = this._view.slice();
     this._dataVer = (this._dataVer || 0) + 1;
     this._catW = null; this._navKey = null;
     this._yCur = null;
@@ -995,18 +1233,22 @@ export class PocketChart {
       let key, def;
       if (!Y) {
         key = '__default';
-        def = { min: o.y.min, max: o.y.max, opposite: false, show: (o.axis || {}).y !== false, format: o.y.format || null, zero: o.y.zero, title: o.y.title || '' };
+        def = { min: o.y.min, max: o.y.max, opposite: false, show: (o.axis || {}).y !== false, format: typeof o.y.format === 'function' ? o.y.format : null, num: numSpec(o.y), zero: o.y.zero, title: o.y.title || '', stable: o.y.stable ?? true };
       } else {
         const fixed = Y.min != null && Y.max != null && +Y.max > +Y.min;
         key = Y.id != null ? 'id:' + Y.id : fixed ? `mm:${+Y.min}|${+Y.max}|${Y.opposite ? 'R' : 'L'}` : 'auto:' + s.key;
-        def = { min: Y.min ?? null, max: Y.max ?? null, opposite: !!Y.opposite, show: Y.show !== false, format: Y.format || null, zero: Y.zero ?? null, title: Y.title || '' };
+        def = { min: Y.min ?? null, max: Y.max ?? null, opposite: !!Y.opposite, show: Y.show !== false, format: typeof Y.format === 'function' ? Y.format : null, num: numSpec(Y), zero: Y.zero ?? null, title: Y.title || '', stable: Y.stable ?? true };
       }
       let ax = axes.get(key);
       if (!ax) axes.set(key, (ax = { key, id: Y && Y.id != null ? Y.id : key === '__default' ? 'default' : key, ...def, series: [], cur: null }));
-      else { if (!ax.format && def.format) ax.format = def.format; if (!ax.title && def.title) ax.title = def.title; }
+      else { if (!ax.format && def.format) ax.format = def.format; if (!ax.num && def.num) ax.num = def.num; if (!ax.title && def.title) ax.title = def.title; }
       ax.series.push(s); s.axis = ax;
     });
     this._axisList = [...axes.values()];
+    this._axisList.forEach((ax) => { ax.nf = ax.num ? numFormatter(ax.num, this._locale) : null; });
+    this._yNum = numSpec(o.y); this._yNf = this._yNum ? numFormatter(this._yNum, this._locale) : null;
+    this._tipNf = numSpec(o.tooltip) ? numFormatter(numSpec(o.tooltip), this._locale) : null;
+    (this._series || []).forEach((s) => { s.nf = s.num ? numFormatter(s.num, this._locale) : null; });
     this._padCur = null;
   }
 
@@ -1019,7 +1261,8 @@ export class PocketChart {
   /** Dominio objetivo de un eje (mismas reglas que el eje único, por eje). */
   _axisTarget(ax) {
     const [v0, v1] = this._view;
-    const vis = ax.series.filter((s) => !this._hidden.has(s.key));
+    // Escala estable: ocultar una serie no cambia la escala de su eje (sólo los apilados se recalculan).
+    const vis = ax.series.filter((s) => !this._hidden.has(s.key) || (ax.stable && !s.stackKey));
     const key = v0 + '|' + v1 + '|' + this._dataVer + '|' + vis.map((s) => s.key).join(',');
     if (ax._tc && ax._tc.key === key) return ax._tc.val;
     let lo, hi;
@@ -1050,9 +1293,19 @@ export class PocketChart {
 
   _fmtAxisTick(ax, v, step) {
     if (ax.format) return ax.format(v);
+    if (ax.compact) return this._compactTick(ax, v, step);
+    if (ax.nf) return ax.nf(v);
     if (ax.key === '__default') return this._fmtYTick(v, step);
     const t = this._fmtTick(v, step, true);
     return this._pct && ax.series.some((s) => s.stackKey) ? t + '%' : t;
+  }
+
+  /** Etiqueta compacta (5k, 1.25M) con los decimales justos para que dos marcas nunca se lean igual. */
+  _compactTick(ax, v, step) {
+    const m = Math.max(...(ax.ticks || [v]).map(Math.abs), Math.abs(v));
+    const k = m >= 1e9 ? 1e9 : m >= 1e6 ? 1e6 : m >= 1e3 ? 1e3 : 1;
+    const dec = clamp(Math.ceil(-Math.log10(step / k) - 1e-9), 0, 4);
+    return numFormatter({ ...(ax.num || {}), style: 'compact', decimals: dec }, this._locale)(v);
   }
 
   /** Ejes, cuadrícula y eje X cuando hay varios ejes Y. Deja activo el eje principal. */
@@ -1064,6 +1317,7 @@ export class PocketChart {
     const ease = (cur, t, tol) => { const d = t - cur; if (Math.abs(d) > tol) { moving = true; return cur + d * k; } return t; };
     const yCount = Math.max(2, Math.floor(H / 56));
     const active = this._axisList.filter((ax) => ax.series.some((s) => !this._hidden.has(s.key)));
+    if (this._axW !== W) { this._axW = W; this._axisList.forEach((ax) => (ax.compact = false)); } // al girar o redimensionar se recalcula
     ctx.font = `11px ${C.font}`;
     active.forEach((ax) => {
       const t = this._axisTarget(ax);
@@ -1076,7 +1330,25 @@ export class PocketChart {
       ax.w = ax.show ? Math.max(32, Math.max(...ax.labels.map((l) => this._mw(l)), this._mw(this._fmtAxisTick(ax, t[0], ax.step)), this._mw(this._fmtAxisTick(ax, t[1], ax.step))) + 12) : 0;
       ax.color = (ax.series.find((s) => !this._hidden.has(s.key)) || ax.series[0]).color;
     });
-    const left = active.filter((a) => a.show && !a.opposite), right = active.filter((a) => a.show && a.opposite);
+    // Muchos ejes en una pantalla estrecha: etiquetas compactas (5,000 → 5k) para que el gráfico conserve espacio.
+    const sumW = () => active.reduce((n, a) => n + (a.show && !a.squeezed ? a.w : 0), 0);
+    if (sumW() > W * 0.42) active.forEach((ax) => {
+      if (!ax.show || ax.format || ax.compact) return;
+      ax.compact = true;
+      ax.labels = ax.ticks.map((v) => this._compactTick(ax, v, ax.step));
+      ax.w = Math.max(28, Math.max(...ax.labels.map((l) => this._mw(l))) + 12, ax.title ? Math.min(46, this._mw(ax.title) + 8) : 0);
+    });
+    // Aun compactos, si los ejes no caben (pantalla muy estrecha) se dibujan sólo los más cercanos a cada lado:
+    // nunca se salen del lienzo ni dejan el gráfico sin espacio. Los demás siguen en el tooltip y el panel.
+    active.forEach((ax) => (ax.squeezed = false));
+    while (sumW() > W * 0.6) {
+      const shown = active.filter((a) => a.show && !a.squeezed);
+      const l = shown.filter((a) => !a.opposite), rr = shown.filter((a) => a.opposite);
+      const victim = l.length > 1 && (l.length >= rr.length || rr.length < 2) ? l[l.length - 1] : rr.length > 1 ? rr[rr.length - 1] : null;
+      if (!victim) break;
+      victim.squeezed = true; victim.w = 0;
+    }
+    const left = active.filter((a) => a.show && !a.squeezed && !a.opposite), right = active.filter((a) => a.show && !a.squeezed && a.opposite);
     const tgt = { l: left.length ? left.reduce((n, a) => n + a.w, 0) : 8, r: right.length ? right.reduce((n, a) => n + a.w, 0) : 8 };
     // El área de dibujo se reajusta con transición cuando aparece o desaparece un eje.
     if (!this._padCur || snap) this._padCur = { ...tgt };
@@ -1187,10 +1459,10 @@ export class PocketChart {
     this._colors = { bg: v('--pc-bg'), fg: v('--pc-fg'), muted: v('--pc-muted'), grid: v('--pc-grid'), axis: v('--pc-axis'), font: v('--pc-font') || 'system-ui' };
     const custom = th === 'dark' ? this.opts.colorsDark || this.opts.colors : this.opts.colors;
     this._mwc = null; this._navKey = null;
-    this._palette = custom && custom.length ? custom.slice() : Array.from({ length: 8 }, (_, i) => v(`--pc-c${i + 1}`) || PALETTE[th][i]);
+    this._palette = custom && custom.length ? custom.map(toHex) : Array.from({ length: 8 }, (_, i) => v(`--pc-c${i + 1}`) || PALETTE[th][i]);
     this._series?.forEach((s) => {
       const src = this.opts.series[s.slot] || {};
-      s.color = (th === 'dark' && src.colorDark) || src.color || this._color(s.slot);
+      s.color = toHex((th === 'dark' && src.colorDark) || src.color || this._color(s.slot));
     });
     this._renderLegend();
     this.invalidate();
@@ -1203,28 +1475,46 @@ export class PocketChart {
   _fmtY(v, s) {
     if (v == null) return '–';
     const own = s && s.axis && s.axis.key !== '__default';
-    const f = (s && s.format) || (own ? null : this.opts.y.format);
+    const yf = typeof this.opts.y.format === 'function' ? this.opts.y.format : null;
+    const f = (s && typeof s.format === 'function' && s.format) || (own || this._tipNf ? null : yf);
     if (f) return f(v, s);
-    if (own && s.axis.format) { const t = s.axis.format(v); return s.unit ? `${t} ${s.unit}` : t; } // formato del eje + unidad
+    const u = (t) => (s && s.unit ? `${t} ${s.unit}` : t);
+    // Formatos declarativos: serie > tooltip > eje > y
+    if (s && s.nf) return u(s.nf(v));
+    if (this._tipNf) return u(this._tipNf(v));
+    if (own && s.axis.format) return u(s.axis.format(v)); // formato del eje + unidad
+    if (own && s.axis.nf) return u(s.axis.nf(v));
+    if (!own && this._yNf) return u(this._yNf(v));
+    if (!own && yf) return yf(v, s);
     const a = Math.abs(v);
     const txt = a >= 1e6 ? this._nf(1).format(v / 1e6) + 'M' : a >= 1e4 ? this._nf(1).format(v / 1e3) + 'k' : this._nf(a < 10 ? 2 : a < 100 ? 2 : 1).format(v);
     return s && s.unit ? `${txt} ${s.unit}` : txt;
   }
   _fmtTick(v, step, raw) {
-    const f = raw ? null : this.opts.y.format;
+    const f = raw ? null : typeof this.opts.y.format === 'function' ? this.opts.y.format : null;
     if (f) return f(v);
+    if (!raw && this._yNf) return this._yNf(v);
     const a = Math.max(Math.abs(v), Math.abs(step));
     if (a >= 1e6) return this._nf(2).format(v / 1e6) + 'M';
     if (a >= 1e4) return this._nf(1).format(v / 1e3) + 'k';
     const dec = Math.max(0, -Math.floor(Math.log10(step)));
     return this._nf(Math.min(dec, 6)).format(v);
   }
-  _fmtYTick(v, step) { const t = this._fmtTick(v, step); return this._pct && !this.opts.y.format ? t + '%' : t; }
+  _fmtYTick(v, step) { const t = this._fmtTick(v, step); return this._pct && !this.opts.y.format && !this._yNf ? t + '%' : t; }
   _fmtXFull(x) {
-    if (this.opts.x.format) return this.opts.x.format(x, 'full');
+    const X = this.opts.x, T = this.opts.tooltip || {};
+    if (this._xType === 'time' && typeof T.dateFormat === 'string') return fmtDate(x, T.dateFormat, this._locale);
+    if (typeof X.format === 'function') return X.format(x, 'full');
     if (this._xType === 'time') {
-      const fine = this._minDx < 864e5;
-      return this._df(fine ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } : { day: 'numeric', month: 'short', year: 'numeric' }).format(x);
+      if (typeof X.format === 'string') return fmtDate(x, X.format, this._locale);
+      // Nunca ambiguo: segundos si los datos los necesitan y el año si no es el actual o el rango cruza años.
+      const fine = this._minDx < 864e5, secs = this._minDx < 6e4;
+      const [f0, f1] = this._full, y0 = new Date(f0).getFullYear();
+      const year = y0 !== new Date(f1).getFullYear() || y0 !== new Date().getFullYear();
+      const o = fine ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } : { day: 'numeric', month: 'short', year: 'numeric' };
+      if (fine && secs) o.second = '2-digit';
+      if (fine && year) o.year = 'numeric';
+      return this._df(o).format(x);
     }
     if (this._xType === 'category') return this._cats[Math.round(x)] ?? String(Math.round(x));
     return this._nf(4).format(x);
@@ -1257,7 +1547,7 @@ export class PocketChart {
     p.addEventListener('pointermove', (e) => this._move(e));
     p.addEventListener('pointerup', (e) => this._up(e));
     p.addEventListener('pointercancel', (e) => this._cancel(e));
-    p.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && !this._ptrs.size && this.opts.hover) this._clearInspect(); });
+    p.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && !this._ptrs.size && this.opts.hover && !this.opts.tooltip.sticky) this._clearInspect(); });
     p.addEventListener('contextmenu', (e) => e.preventDefault());
     p.addEventListener('wheel', (e) => this._wheel(e), { passive: false });
     p.addEventListener('keydown', (e) => this._key(e));
@@ -1278,8 +1568,14 @@ export class PocketChart {
 
     this.$actions.addEventListener('click', (e) => {
       const b = e.target.closest('[data-act]'); if (!b) return;
-      if (b.dataset.act === 'reset') this.resetZoom();
-      if (b.dataset.act === 'fs') this.toggleFullscreen();
+      if (b.dataset.act === 'reset') this.resetZoom('reset');
+      if (b.dataset.act === 'zin') this.zoomBy(0.5, 'button');
+      if (b.dataset.act === 'zout') this.zoomBy(2, 'button');
+      if (b.dataset.act === 'fs') {
+        // 'external': la app abre su propio modal (p. ej. un Modal de React Native) con el mismo rango.
+        if (this.opts.fullscreen === 'external') this._emit('fullscreenRequest', { from: this._view[0], to: this._view[1], zoomed: !!this.isZoomed });
+        else this.toggleFullscreen();
+      }
       if (b.dataset.act === 'dl') this._toggleMenu();
     });
     this._onFsChange = () => {
@@ -1292,7 +1588,29 @@ export class PocketChart {
     this._onKeyFs = (e) => { if (e.key === 'Escape' && this._fsFallback) this.toggleFullscreen(false); };
     document.addEventListener('keydown', this._onKeyFs);
 
+    this.$range.addEventListener('click', (e) => { if (e.target.closest('[data-act=reset]')) this.resetZoom('reset'); });
+    // Respaldo con eventos touch*: si el navegador cancela los punteros a mitad de un gesto
+    // (pasa en algunas WebView de iOS y Android), el gesto sigue con los eventos táctiles.
+    if ('ontouchstart' in window) {
+      p.addEventListener('touchstart', (e) => this._touch(e, 'start'), { passive: false });
+      p.addEventListener('touchmove', (e) => this._touch(e, 'move'), { passive: false });
+      p.addEventListener('touchend', (e) => this._touch(e, 'end'), { passive: false });
+      p.addEventListener('touchcancel', (e) => this._touch(e, 'end'), { passive: false });
+    }
     this._bindNav();
+  }
+
+  _touch(e, kind) {
+    if (this._isPie) return;
+    this._lastTouches = e.touches;
+    const g = this._g;
+    if (kind === 'start' && e.touches.length >= 2 && this.opts.zoom && e.cancelable) e.preventDefault(); // sin zoom de la página
+    if (kind === 'move' && g && (g.mode === 'pan' || g.mode === 'pinch' || g.mode === 'scrub') && e.cancelable) e.preventDefault(); // sin scroll mientras se arrastra
+    if (!this._tt) return;
+    const fake = (t) => ({ pointerId: 't' + t.identifier, clientX: t.clientX, clientY: t.clientY, pointerType: 'touch' });
+    if (kind === 'start') for (const t of e.changedTouches) this._down(fake(t));
+    else if (kind === 'move') for (const t of e.changedTouches) this._move(fake(t));
+    else { for (const t of e.changedTouches) this._up(fake(t)); if (!e.touches.length) this._tt = false; }
   }
 
   _setFallbackFs(on) {
@@ -1326,9 +1644,16 @@ export class PocketChart {
     const r = this._rect; return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
 
+  _interact(on, info) {
+    if (on === !!this._interacting) return;
+    this._interacting = on;
+    this._emit(on ? 'interactionStart' : 'interactionEnd', info || {});
+  }
+
   _down(e) {
     this._hideHint();
-    cancelAnimationFrame(this._inertia);
+    if (this._inertia) { cancelAnimationFrame(this._inertia); this._inertia = 0; this._zoomEnd('pan'); }
+    this._interact(true, { pointerType: e.pointerType });
     try { this.$plot.setPointerCapture(e.pointerId); } catch (_) {}
     const pt = this._local(e, true);
     this._ptrs.set(e.pointerId, { ...pt, sx: pt.x, sy: pt.y });
@@ -1391,18 +1716,36 @@ export class PocketChart {
     if (this._ptrs.size === 1 && g.mode === 'pinch') {
       // Al levantar un dedo del pellizco seguimos arrastrando con el otro.
       const [p] = [...this._ptrs.values()];
-      this._g = { mode: 'pan', x0: p.x, y0: p.y, view0: this._view.slice(), hist: [], type: 'touch' };
+      this._g = { mode: 'pan', x0: p.x, y0: p.y, view0: this._view.slice(), hist: [], type: 'touch', src: 'pinch' };
       return;
     }
     if (this._ptrs.size) return;
     const pt = this._local(e);
     if (g.mode === 'pending' && performance.now() - g.t0 < 350) this._tap(pt.x, pt.y, g.type);
-    if (g.mode === 'pan' && g.hist.length > 1) this._startInertia(g.hist);
-    if (g.mode === 'scrub' && g.type === 'mouse' && !this.opts.hover) this._clearInspect();
+    const src = g.src || (g.mode === 'pinch' ? 'pinch' : 'pan');
+    if (g.mode === 'pan' || g.mode === 'pinch') { if (!(g.mode === 'pan' && g.hist.length > 1 && this._startInertia(g.hist, src))) this._zoomEnd(src); }
+    if (g.mode === 'scrub' && g.type === 'mouse' && !this.opts.hover && !this.opts.tooltip.sticky) this._clearInspect();
     this._g = null;
+    this._interact(false, { gesture: g.mode });
   }
 
-  _cancel(e) { this._ptrs.delete(e.pointerId); clearTimeout(this._g?.lp); if (!this._ptrs.size) this._g = null; }
+  _cancel(e) {
+    const g = this._g;
+    // El navegador se quedó el gesto (pasa en algunas WebView): seguimos con los eventos táctiles.
+    if (e.pointerType === 'touch' && g && (g.mode === 'pan' || g.mode === 'pinch' || g.mode === 'scrub') && this._lastTouches && this._lastTouches.length && !this._tt) {
+      clearTimeout(g.lp);
+      this._tt = true; this._ptrs.clear(); this._g = null;
+      const fake = (t) => ({ pointerId: 't' + t.identifier, clientX: t.clientX, clientY: t.clientY, pointerType: 'touch' });
+      for (const t of this._lastTouches) this._down(fake(t));
+      if (g.mode === 'scrub' && this._g) this._g.mode = 'scrub';
+      return;
+    }
+    this._ptrs.delete(e.pointerId); clearTimeout(g?.lp);
+    if (!this._ptrs.size) {
+      if (g && (g.mode === 'pan' || g.mode === 'pinch')) this._zoomEnd(g.src || g.mode);
+      this._g = null; this._interact(false, { gesture: g ? g.mode : 'none' });
+    }
+  }
 
   _tap(x, y, type) {
     if (this._error) { if (typeof this._lastSrc === 'function') this.load(this._lastSrc).catch(() => {}); return; }
@@ -1411,8 +1754,8 @@ export class PocketChart {
     const dbl = this._lastTap && now - this._lastTap.t < 300 && Math.hypot(x - this._lastTap.x, y - this._lastTap.y) < 30;
     this._lastTap = dbl ? null : { t: now, x, y };
     if (dbl && !this._isPie && this.opts.zoom) {
-      if (this.isZoomed) this.resetZoom();
-      else { const c = this._invX(x), span = (this._full[1] - this._full[0]) / 3; this.zoomTo(c - span / 2, c + span / 2); }
+      if (this.isZoomed) this.resetZoom('doubletap');
+      else { const c = this._invX(x), span = (this._full[1] - this._full[0]) / 3; this.zoomTo(c - span / 2, c + span / 2, true, 'doubletap'); }
       this._clearInspect();
       return;
     }
@@ -1423,23 +1766,25 @@ export class PocketChart {
     else this._inspectAt(x, y, type !== 'mouse');
   }
 
-  _startInertia(hist) {
+  _startInertia(hist, src = 'pan') {
     const a = hist[0], b = hist[hist.length - 1];
-    const dt = b.t - a.t; if (dt <= 0 || dt > 120) return;
+    const dt = b.t - a.t; if (dt <= 0 || dt > 120) return false;
     let v = (b.x - a.x) / dt; // px/ms
-    if (reduceMotion()) return;
+    if (reduceMotion() || Math.abs(v) < 0.02) return false;
     let last = performance.now();
+    const done = () => { this._inertia = 0; this._zoomEnd(src); };
     const step = (now) => {
       const dtt = now - last; last = now;
       v *= Math.pow(0.94, dtt / 16);
-      if (Math.abs(v) < 0.02) return;
+      if (Math.abs(v) < 0.02) return done();
       const span = this._view[1] - this._view[0];
       const d = -v * dtt / this._plotRect.w * span;
       this._setView([this._view[0] + d, this._view[1] + d]);
-      if (this._view[0] <= this._full[0] || this._view[1] >= this._full[1]) return;
+      if (this._view[0] <= this._full[0] || this._view[1] >= this._full[1]) return done();
       this._inertia = requestAnimationFrame(step);
     };
     this._inertia = requestAnimationFrame(step);
+    return true;
   }
 
   _wheel(e) {
@@ -1455,7 +1800,9 @@ export class PocketChart {
       e.preventDefault();
       const span = this._view[1] - this._view[0], d = e.deltaX / this._plotRect.w * span;
       this._setView([this._view[0] + d, this._view[1] + d]);
-    }
+    } else return;
+    clearTimeout(this._wheelT);
+    this._wheelT = setTimeout(() => this._zoomEnd('wheel'), 250); // un solo zoomEnd al dejar la rueda
   }
 
   _key(e) {
@@ -1475,24 +1822,37 @@ export class PocketChart {
     switch (e.key) {
       case 'ArrowRight': i = Math.min(pts.length - 1, i + 1); break;
       case 'ArrowLeft': i = Math.max(0, i - 1); break;
-      case '+': case '=': this.zoomTo(c - span / 3, c + span / 3); e.preventDefault(); return;
-      case '-': this.zoomTo(c - span, c + span); e.preventDefault(); return;
-      case '0': this.resetZoom(); e.preventDefault(); return;
+      case '+': case '=': this.zoomTo(c - span / 3, c + span / 3, true, 'keyboard'); e.preventDefault(); return;
+      case '-': this.zoomTo(c - span, c + span, true, 'keyboard'); e.preventDefault(); return;
+      case '0': this.resetZoom('keyboard'); e.preventDefault(); return;
       case 'Escape': this._clearInspect(); return;
       default: return;
     }
     e.preventDefault();
     const x = pts[i].x;
-    if (x < this._view[0] || x > this._view[1]) this.zoomTo(x - span / 2, x + span / 2, false);
+    if (x < this._view[0] || x > this._view[1]) this.zoomTo(x - span / 2, x + span / 2, false, 'keyboard');
     this._inspectAt(this._sx(x), this._plotRect.y + 20, false);
   }
 
-  _setView(v) {
+  /** Limita una vista: dentro del rango de datos, con el zoom mínimo y nunca vacía. */
+  _clampView(v) {
     const [f0, f1] = this._full;
-    let span = clamp(v[1] - v[0], this._minSpan, f1 - f0);
+    const span = clamp(v[1] - v[0], this._minSpan, f1 - f0);
     let a = clamp(v[0], f0, f1 - span);
+    // En huecos grandes de datos, la vista se centra en el punto más cercano para no quedar vacía.
+    const ref = (this._series || []).filter((s) => !this._hidden.has(s.key) && s.points.length).sort((x, y) => y.points.length - x.points.length)[0];
+    if (ref && span < f1 - f0) {
+      const p = ref.points, i = lowerBound(p, a);
+      if (i >= p.length || p[i].x > a + span) {
+        const c = i >= p.length ? p[p.length - 1].x : i > 0 && a - p[i - 1].x < p[i].x - (a + span) ? p[i - 1].x : p[i].x;
+        a = clamp(c - span / 2, f0, f1 - span);
+      }
+    }
+    return [a, a + span];
+  }
+  _setView(v) {
     const wasZoomed = this.isZoomed;
-    this._view = [a, a + span];
+    this._view = this._clampView(v);
     if (wasZoomed !== this.isZoomed) { this._renderHeader(); this._layoutNav(); }
     if (this._inspect) this._refreshInspect();
     this._zoomEvt = true; // el evento se emite una vez por fotograma
@@ -1505,6 +1865,7 @@ export class PocketChart {
     let drag = null;
     n.addEventListener('pointerdown', (e) => {
       n.setPointerCapture(e.pointerId);
+      this._interact(true, { pointerType: e.pointerType });
       const r = n.getBoundingClientRect(), fx = (e.clientX - r.left) / r.width;
       const [f0, f1] = this._full, full = f1 - f0, span = this._view[1] - this._view[0];
       const x = f0 + fx * full;
@@ -1516,11 +1877,13 @@ export class PocketChart {
       const full = this._full[1] - this._full[0], d = (e.clientX - drag.x) / drag.w * full;
       this._setView([drag.v0[0] + d, drag.v0[1] + d]);
     });
-    const end = () => { drag = null; };
+    const end = () => { if (!drag) return; drag = null; this._zoomEnd('navigator'); this._interact(false, { gesture: 'navigator' }); };
     n.addEventListener('pointerup', end); n.addEventListener('pointercancel', end);
   }
 
+  get _rangeOn() { const R = this.opts.rangeBar; return !this._isPie && (R === true || (R === 'auto' && !!this.isZoomed)); }
   _layoutNav() {
+    if (this.$range.hidden === this._rangeOn) { this.$range.hidden = !this._rangeOn; this._rangeTxt = null; }
     const want = this.opts.navigator === true || (this.opts.navigator === 'auto' && this.isZoomed);
     const show = want && !this._isPie;
     if (this.$nav.hidden === !show) return;
@@ -1542,7 +1905,7 @@ export class PocketChart {
   }
 
   _sizeCanvas(c, ctx) {
-    const dpr = Math.min(this.opts.maxPixelRatio || 2, window.devicePixelRatio || 1);
+    const dpr = Math.min(this.opts.lite ? Math.min(1.5, this.opts.maxPixelRatio || 2) : this.opts.maxPixelRatio || 2, window.devicePixelRatio || 1);
     const w = c.parentElement.clientWidth, h = c.parentElement.clientHeight;
     if (!w || !h) return;
     if (c._w === w && c._h === h && c._dpr === dpr) return; // reasignar width borra y recrea el lienzo
@@ -1553,7 +1916,7 @@ export class PocketChart {
   }
 
   _showHint() {
-    if (!this.opts.hint || this._hintShown || this._isPie) return;
+    if (!this.opts.hint || this.opts.lite || this._hintShown || this._isPie) return;
     this._hintShown = true;
     const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
     this.$hint.textContent = coarse ? this.t.hintTouch : this.t.hintMouse;
@@ -1569,7 +1932,7 @@ export class PocketChart {
   _refSeries() { const v = this._visibleSeries(); return v.find((s) => s.type !== 'scatter') || v[0]; }
 
   _yTarget() {
-    const o = this.opts.y, vis = this._visibleSeries();
+    const o = this.opts.y, vis = o.stable ? this._series.filter((s) => !this._hidden.has(s.key) || !s.stackKey) : this._visibleSeries();
     const [v0, v1] = this._view;
     const key = v0 + '|' + v1 + '|' + this._dataVer + '|' + vis.map((s) => s.key).join(',');
     if (this._ytc && this._ytc.key === key && this._ytc.o === o) return this._ytc.val;
@@ -1741,6 +2104,41 @@ export class PocketChart {
 
     this._drawInspect();
     if (!this.$nav.hidden) this._renderNav();
+    if (!this.$range.hidden) this._updateRange();
+    if (!this.$insp.hidden) this._updateInspector();
+    if (this._pendingSel != null && !this._enter) { const x = this._pendingSel; this._pendingSel = null; this.select(x); }
+  }
+
+  /** Rango visible (inicio – fin) junto al botón de restablecer. */
+  _updateRange() {
+    const [a, b] = this._view;
+    // Si la plantilla de fecha no distingue un rango tan corto (p. ej. 'MM/dd HH:mm' con 90 s), se usa el formato automático con segundos.
+    const pat = this._xType === 'time' && (typeof this.opts.tooltip.dateFormat === 'string' ? this.opts.tooltip.dateFormat : typeof this.opts.x.format === 'string' ? this.opts.x.format : null);
+    const auto = pat && dateRes(pat) * 4 > b - a;
+    const f = (x) => this._xType === 'category' ? (this._cats[clamp(Math.round(x), 0, this._cats.length - 1)] ?? '')
+      : auto ? this._df({ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(x) : this._fmtXFull(x);
+    const txt = this._xType === 'category' ? `${f(Math.ceil(a))} – ${f(Math.floor(b))}` : `${f(a)} – ${f(b)}`;
+    if (txt !== this._rangeTxt) { this._rangeTxt = txt; this.$rangeT.textContent = txt; }
+  }
+
+  /** Panel de valores bajo el gráfico: la selección o, sin ella, el último dato. */
+  _updateInspector() {
+    let ins = this._inspect;
+    if (!ins) {
+      let lx = -Infinity;
+      this._visibleSeries().forEach((s) => { for (let i = s.points.length - 1; i >= 0; i--) if (s.points[i].y != null) { if (s.points[i].x > lx) lx = s.points[i].x; break; } });
+      ins = isFinite(lx) ? this._rowsAt(lx, this._visibleSeries()) : null;
+    }
+    const key = (ins ? ins.id : '-') + '|' + this._dataVer + '|' + [...this._hidden].join(',') + '|' + this._theme;
+    if (key === this._inspKey) return;
+    this._inspKey = key;
+    if (!ins) { this.$insp.innerHTML = `<div class="pc-insp-h">${esc(this.t.tapHint)}</div>`; return; }
+    const byKey = new Map(ins.rows.map((r) => [r.s.key, r]));
+    const rows = this._visibleSeries().map((s) => {
+      const r = byKey.get(s.key);
+      return `<div class="pc-tip-r"><span class="pc-dot" style="background:${s.color}"></span><span class="pc-tip-n">${esc(s.name)}</span><span class="pc-tip-v">${esc(r ? this._fmtY(r.q.v, s) : '–')}</span></div>`;
+    }).join('');
+    this.$insp.innerHTML = `<div class="pc-insp-h">${esc(this._fmtXFull(ins.x))}</div><div class="pc-insp-g">${rows}</div>`;
   }
 
   _renderXAxis(W, H) {
@@ -1748,11 +2146,26 @@ export class PocketChart {
     const [v0, v1] = this._view;
     const ticks = [];
     if (this._xType === 'time') {
-      const sample = this._df({ day: 'numeric', month: 'short' }).format(Date.UTC(2026, 8, 28));
+      // x.format como plantilla ('MM/dd HH:mm'): se usa mientras el paso lo permita; al acercar más
+      // se pasa solo a HH:mm o HH:mm:ss para que no haya etiquetas repetidas o ambiguas.
+      const pat = typeof this.opts.x.format === 'string' ? this.opts.x.format : null;
+      const ms = (s) => (typeof s === 'number' ? s : s[0] === 'M' ? +s.slice(1) * 2592e6 : +s.slice(1) * 31536e6);
+      const sample = pat ? fmtDate(new Date(2026, 9, 28, 23, 59, 59).getTime(), pat, this._locale) : this._df({ day: 'numeric', month: 'short' }).format(Date.UTC(2026, 8, 28));
       const lw = this._mw(sample) + 18;
       const pxPerMs = r.w / (v1 - v0);
-      let step = TIME_STEPS.find((s) => (typeof s === 'number' ? s : s[0] === 'M' ? +s.slice(1) * 2592e6 : +s.slice(1) * 31536e6) * pxPerMs >= lw) || 'Y10';
-      ticks.push(...this._timeTicks(v0, v1, step));
+      // Ancho real de la etiqueta según el paso (con segundos es más larga): así caben al menos dos.
+      const ref = new Date(2026, 9, 28, 23, 59, 59).getTime();
+      const lwSec = this._mw(this._df({ hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(ref)) + 14;
+      const lwMin = this._mw(this._df({ hour: '2-digit', minute: '2-digit' }).format(ref)) + 14;
+      const need = (s) => (pat ? lw : ms(s) < 6e4 ? lwSec : ms(s) < 864e5 ? Math.max(lwMin, lw - 4) : lw);
+      let step = TIME_STEPS.find((s) => ms(s) * pxPerMs >= need(s)) || 'Y10';
+      if (pat && ms(step) < dateRes(pat)) { // la plantilla no distingue ese paso: etiquetas automáticas (más cortas)
+        const lw2 = this._mw('00:00:00') + 18;
+        step = TIME_STEPS.find((s) => ms(s) * pxPerMs >= lw2) || 'Y10';
+      }
+      const tk = this._timeTicks(v0, v1, step);
+      if (pat && ms(step) >= dateRes(pat)) tk.forEach((t) => { t.label = fmtDate(t.v, pat, this._locale); t.strong = false; });
+      ticks.push(...tk);
     } else if (this._xType === 'category') {
       const band = r.w / (v1 - v0);
       if (this._catW == null) this._catW = Math.max(10, ...this._cats.map((c) => this._mw(String(c))));
@@ -1798,7 +2211,7 @@ export class PocketChart {
     if (lc.size > 4000) lc.clear();
     const dfRaw = (o) => this._df(o);
     // Las etiquetas de fecha se formatean una vez y se reutilizan mientras se arrastra.
-    const df = (o) => ({ format: (t) => { const k = (o.hour ? 'h' : o.day ? 'd' : o.month ? 'm' : 'y') + (o.second ? 's' : '') + (+t); let v = lc.get(k); if (v === undefined) { v = dfRaw(o).format(t); lc.set(k, v); } return v; } });
+    const df = (o) => ({ format: (t) => { const k = Object.keys(o).join(',') + (+t); let v = lc.get(k); if (v === undefined) { v = dfRaw(o).format(t); lc.set(k, v); } return v; } });
     if (typeof step === 'number') {
       if (step < 864e5) {
         const off = (t) => -new Date(t).getTimezoneOffset() * 6e4;
@@ -1809,6 +2222,11 @@ export class PocketChart {
             : df(step < 6e4 ? { hour: '2-digit', minute: '2-digit', second: '2-digit' } : { hour: '2-digit', minute: '2-digit' }).format(t);
           out.push({ v: t, label, strong: mid });
         }
+        // Sin medianoche a la vista, la primera etiqueta lleva también el día (si no, "08:00" no dice de qué día es).
+        if (out.length && !out.some((o) => o.strong) && !this._rangeOn) { // con zoom, el día ya va en la barra de rango
+          out[0].label = df(step < 6e4 ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' } : { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(out[0].v);
+          out[0].strong = true;
+        }
       } else {
         const days = Math.round(step / 864e5);
         const d = new Date(v0); d.setHours(0, 0, 0, 0);
@@ -1817,7 +2235,8 @@ export class PocketChart {
         for (let n = 0; d.getTime() <= v1 && n < 500; n++) {
           if (d.getTime() >= v0) {
             const first = d.getDate() === 1;
-            out.push({ v: d.getTime(), label: first ? df({ month: 'short' }).format(d) : df({ day: 'numeric', month: 'short' }).format(d), strong: first });
+            const jan = first && d.getMonth() === 0; // el 1 de enero muestra el año
+            out.push({ v: d.getTime(), label: jan ? String(d.getFullYear()) : first ? df({ month: 'short' }).format(d) : df({ day: 'numeric', month: 'short' }).format(d), strong: first });
           }
           d.setDate(d.getDate() + days);
         }
@@ -1953,7 +2372,9 @@ export class PocketChart {
     // Marcadores: automáticos cuando hay espacio de sobra, o forzados por opción.
     const M = { ...o.markers, ...(s.markers || {}) };
     const total = segs.reduce((n, sg) => n + sg.length, 0);
-    const show = M.show === true || (M.show === 'auto' && !dense && total && r.w / total > 14);
+    // Las líneas punteadas (consignas, setpoints) no llevan marcadores salvo que se pidan.
+    const dashed = (s.dash || o.line.dash || []).length > 0;
+    const show = M.show === true || (M.show === 'auto' && !dashed && !dense && total && r.w / total > 14);
     if (show && !dense) segs.forEach((seg) => seg.forEach((q) => this._marker(q[0], q[1], (M.size ?? 3.5) * this._popScale(q[0]), s.color, 2, M.shape)));
   }
 
@@ -1987,9 +2408,10 @@ export class PocketChart {
 
   _drawBars(s, bi, nb) {
     const ctx = this.ctx, r = this._plotRect, B = this.opts.bar || {};
-    const unit = this._xType === 'category' ? 1 : this._minDx;
+    const unit = this._xType === 'category' ? 1 : this._barDx || this._minDx;
     const band = unit / (this._view[1] - this._view[0]) * r.w;
-    const group = band * (B.width ?? 0.7) * (nb > 1 ? 1.12 : 1);
+    const frac = B.padding != null ? clamp(1 - B.padding, 0.05, 1) : (B.width ?? 0.7) * (nb > 1 ? 1.12 : 1);
+    const group = band * Math.min(frac, 1);
     const gap = nb > 1 ? 2 : 0;
     const bw = Math.max(1, group / nb - gap);
     const base = this._sy(this._baseVal);
@@ -2032,7 +2454,7 @@ export class PocketChart {
   }
 
   _alpha(hex, a) {
-    const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+    const m = /^#?([0-9a-f]{6})$/i.exec(toHex(String(hex)).trim());
     if (!m) return hex;
     const n = parseInt(m[1], 16);
     return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
@@ -2055,10 +2477,34 @@ export class PocketChart {
       if (this._multi && this._primary) this._useAxis(this._primary);
       return best && { id: best.s.key + ':' + best.q.i, x: best.q.x, rows: [{ s: best.s, q: best.q }], scatter: true };
     }
-    const i = nearestIndex(ref.points, clamp(this._invX(px), this._view[0], this._view[1]));
-    if (i < 0) return null;
-    const x = ref.points[i].x;
-    const rows = vis.map((s) => { const j = nearestIndex(s.points, x); const q = s.points[j]; return q && Math.abs(q.x - x) < this._minDx / 2 ? { s, q } : null; }).filter(Boolean);
+    // Series con distinta cantidad de puntos y fechas desiguales: se elige la fecha más cercana
+    // entre todas las series visibles, y cada serie aporta su punto si está a menos de medio paso propio.
+    const tx = clamp(this._invX(px), this._view[0], this._view[1]);
+    let x = null, bd = Infinity;
+    vis.forEach((s) => {
+      if (s.type === 'scatter') return;
+      const j = nearestIndex(s.points, tx); if (j < 0) return;
+      const q = s.points[j]; if (q.y == null && s.points.length > 1) return;
+      const d = Math.abs(q.x - tx); if (d < bd) { bd = d; x = q.x; }
+    });
+    if (x == null) { const i = nearestIndex(ref.points, tx); if (i < 0) return null; x = ref.points[i].x; }
+    return this._rowsAt(x, vis);
+  }
+
+  /** Selección en la fecha `x` exacta de un punto (o la más cercana). */
+  _hitAtX(tx) {
+    const vis = this._visibleSeries();
+    let x = null, bd = Infinity;
+    vis.forEach((s) => { const j = nearestIndex(s.points, tx); if (j < 0) return; const d = Math.abs(s.points[j].x - tx); if (d < bd) { bd = d; x = s.points[j].x; } });
+    return x == null ? null : this._rowsAt(x, vis);
+  }
+
+  _rowsAt(x, vis) {
+    const rows = vis.map((s) => {
+      const j = nearestIndex(s.points, x); const q = s.points[j];
+      const tol = Math.max(this._minDx, Math.min(s._dx || this._minDx, (this._view[1] - this._view[0]) / 4)) / 2;
+      return q && Math.abs(q.x - x) <= tol + 1e-9 ? { s, q } : null;
+    }).filter(Boolean);
     return { id: 'x' + x, x, rows };
   }
 
@@ -2066,9 +2512,13 @@ export class PocketChart {
     if (this._isPie) { const i = this._sliceAt(px, py); if (i >= 0) this._selectSlice(i, touch); else this._clearInspect(); return; }
     const hit = this._hitTest(px, py);
     if (!hit) return;
+    this._applyInspect(hit, py, touch);
+  }
+
+  _applyInspect(hit, py, touch) {
     const changed = !this._inspect || this._inspect.id !== hit.id;
     this._inspect = { ...hit, py, touch };
-    if (changed) { if (touch) navigator.vibrate?.(3); this._emit('inspect', { x: hit.x, label: this._fmtXFull(hit.x), points: hit.rows.map((r) => ({ series: r.s.name, x: r.q.x, y: r.q.v, data: r.q.raw, ...(this._multi ? { unit: r.s.unit, yAxis: { id: r.s.yAxisOpt && r.s.yAxisOpt.id != null ? r.s.yAxisOpt.id : null, min: r.s.axis.cur ? r.s.axis.cur[0] : r.s.axis.min, max: r.s.axis.cur ? r.s.axis.cur[1] : r.s.axis.max, opposite: r.s.axis.opposite } } : {}) })) }); }
+    if (changed) { if (touch) navigator.vibrate?.(3); this._emit('inspect', { x: hit.x, label: this._fmtXFull(hit.x), points: hit.rows.map((r) => ({ series: r.s.name, id: r.s.key, x: r.q.x, y: r.q.v, data: r.q.raw, color: r.s.color, formatted: this._fmtY(r.q.v, r.s), ...(this._multi ? { unit: r.s.unit, yAxis: { id: r.s.yAxisOpt && r.s.yAxisOpt.id != null ? r.s.yAxisOpt.id : null, min: r.s.axis.cur ? r.s.axis.cur[0] : r.s.axis.min, max: r.s.axis.cur ? r.s.axis.cur[1] : r.s.axis.max, opposite: r.s.axis.opposite } } : {}) })) }); }
     this.invalidate();
   }
 
@@ -2114,11 +2564,26 @@ export class PocketChart {
         if (el.textContent !== v) el.textContent = v;
       });
     }
-    this._placeTip(this._tipHtml(ins), x, isFinite(top) ? top : r.y + r.h / 2, ins.touch ? ins.py : null);
+    const TS = this.opts.tooltip.show;
+    if (TS === true || (TS !== false && this.opts.inspector !== 'bottom')) this._placeTip(this._tipHtml(ins), x, isFinite(top) ? top : r.y + r.h / 2, ins.touch ? ins.py : null);
   }
 
+  /** Valores de una selección para plantillas: total, porcentaje y textos ya formateados. */
+  _tipVars(ins) {
+    const rows = ins.rows.filter((r) => r.q.v != null);
+    const st = rows.filter((r) => r.s.stackKey);
+    const grp = st.length > 1 ? st : rows;
+    const total = grp.reduce((n, r) => n + r.q.v, 0);
+    const ref = grp[0] && grp[0].s;
+    const totalTxt = ref ? this._fmtY(total, { ...ref, unit: '' }) : '';
+    return { total, totalTxt, unit: ref ? ref.unit : '', x: this._fmtXFull(ins.x), sumAbs: grp.reduce((n, r) => n + Math.abs(r.q.v), 0) };
+  }
+  _fill(tpl, vars) { return String(tpl).replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : '')); }
+
   _tipHtml(ins) {
-    const f = this.opts.tooltip.format;
+    const T = this.opts.tooltip || {};
+    const f = typeof T.format === 'function' ? T.format : null;
+    if (T.template || T.header || T.footer) return this._tipTemplate(ins, T);
     if (f) return f({ x: ins.x, label: this._fmtXFull(ins.x), points: ins.rows.map((r) => ({ series: r.s.name, color: r.s.color, x: r.q.x, y: r.q.v, data: r.q.raw, share: r.s.stackKey && this._pct ? r.q.y - (r.q.below ? r.q.below.y : 0) : undefined })) });
     const head = ins.scatter ? `${esc(ins.rows[0].s.name)}` : esc(this._fmtXFull(ins.x));
     // Con series apiladas, el orden del tooltip sigue al dibujo: la capa de arriba, primero.
@@ -2128,6 +2593,28 @@ export class PocketChart {
     const st = ins.scatter ? [] : ins.rows.filter((r) => r.s.stackKey && r.q.v != null);
     const total = st.length > 1 ? `<div class="pc-tip-r pc-tip-t"><span class="pc-tip-n">${esc(this.t.total)}</span><span class="pc-tip-v">${esc(this._fmtY(st.reduce((n, r) => n + r.q.v, 0), st[0].s))}</span></div>` : '';
     return `<div class="pc-tip-h">${head}</div>${rows}${total}`;
+  }
+
+  /** Tooltip con plantillas de texto: {x}, {series}, {value}, {unit}, {total}, {percent}. */
+  _tipTemplate(ins, T) {
+    const V = this._tipVars(ins);
+    const head = T.header ? this._fill(T.header, { x: V.x, total: V.totalTxt, unit: V.unit }) : ins.scatter ? ins.rows[0].s.name : V.x;
+    const list = !ins.scatter && this._stacked && ins.rows.every((r) => r.s.stackKey) ? ins.rows.slice().reverse() : ins.rows;
+    const tpl = T.template || '{series}|{value} {unit}';
+    const rows = list.map(({ s, q }) => {
+      const vars = { x: V.x, series: s.name, value: q.v == null ? '–' : this._fmtY(q.v, { ...s, unit: '' }), unit: q.v == null ? '' : s.unit, total: V.totalTxt,
+        percent: q.v == null || !V.sumAbs ? '' : this._nf(1).format(Math.abs(q.v) / V.sumAbs * 100) + '%' };
+      const txt = this._fill(tpl, vars).replace(/\s+$/, '');
+      const cut = txt.indexOf('|'); // "nombre|valor" separa en dos columnas
+      const body = cut >= 0 ? `<span class="pc-tip-n">${esc(txt.slice(0, cut))}</span><span class="pc-tip-v">${esc(txt.slice(cut + 1).trim())}</span>` : `<span class="pc-tip-n" style="color:inherit">${esc(txt)}</span>`;
+      return `<div class="pc-tip-r"><span class="pc-dot" style="background:${s.color}"></span>${body}</div>`;
+    }).join('');
+    const showTotal = T.footer || (ins.rows.filter((r) => r.s.stackKey && r.q.v != null).length > 1);
+    const foot = showTotal ? (() => {
+      const txt = this._fill(T.footer || `${this.t.total}|{total} {unit}`, { x: V.x, total: V.totalTxt, unit: V.unit }).replace(/\s+$/, ''), cut = txt.indexOf('|');
+      return `<div class="pc-tip-r pc-tip-t">${cut >= 0 ? `<span class="pc-tip-n">${esc(txt.slice(0, cut))}</span><span class="pc-tip-v">${esc(txt.slice(cut + 1).trim())}</span>` : `<span class="pc-tip-n" style="color:inherit">${esc(txt)}</span>`}</div>`;
+    })() : '';
+    return `<div class="pc-tip-h">${esc(head)}</div>${rows}${foot}`;
   }
 
   /** Coloca el tooltip junto al punto, por encima del dedo, sin salirse del gráfico. */
@@ -2159,7 +2646,7 @@ export class PocketChart {
     const accent = L.color || this._color(0);
     const type = L.type || 'skeleton';
     const text = L.text === undefined || L.text === null ? (type === 'skeleton' || type === 'pulse' ? '' : this.t.loading) : L.text;
-    const kind = this._isPie ? 'pie' : this.opts.type === 'bar' ? 'bar' : this.opts.type === 'scatter' ? 'scatter' : 'line';
+    const kind = this._isPie ? 'pie' : normType(this.opts.type) === 'bar' ? 'bar' : this.opts.type === 'scatter' ? 'scatter' : 'line';
     // Silueta genérica del gráfico (para skeleton y pulse)
     const ghost = () => {
       ctx.beginPath();
@@ -2421,7 +2908,7 @@ export class PocketChartElement extends HTMLEl {
       this._chart = new PocketChart(this._wrap, cfg);
       this._chart.on('inspect', (d) => this.dispatchEvent(new CustomEvent('inspect', { detail: d })));
       this._chart.on('zoom', (d) => this.dispatchEvent(new CustomEvent('zoom', { detail: d })));
-      ['toggle', 'ready', 'updated', 'error'].forEach((ev) => this._chart.on(ev, (d) => this.dispatchEvent(new CustomEvent(ev, { detail: d }))));
+      ['toggle', 'ready', 'updated', 'error', 'export', 'zoomEnd', 'interactionStart', 'interactionEnd', 'fullscreenRequest', 'visible'].forEach((ev) => this._chart.on(ev, (d) => this.dispatchEvent(new CustomEvent(ev, { detail: d }))));
     }
   }
 }
