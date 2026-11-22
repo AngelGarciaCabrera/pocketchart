@@ -1,5 +1,11 @@
 # Cambios
 
+## 0.6.0 — 2026-11-22
+- `toImage()`: imagen del gráfico (PNG o JPEG) en dataURL, base64 y Blob, sin descargar nada, con ancho fijo, sin título o sin leyenda. Para insertarla en el PDF que arma tu app.
+- `toData()`: los datos en filas (valores reales y texto formateado) para las tablas de ese PDF.
+- React Native: `await ref.current.toImage()` y `await ref.current.toData()` devuelven el resultado directamente, sin pasar por `onExport`.
+- Guías con ejemplos de jsPDF (web) y expo-print (React Native).
+
 ## 0.5.0 — 2026-11-21
 - Exportar: botón de descarga en la cabecera con **PNG**, **PDF** y **Excel (.xlsx)**, y CSV opcional. Todo sin dependencias.
 - API `chart.export(formato, opciones)` y `chart.toBlob(formato)`, opción `export` (formatos, nombre, resolución, página del PDF, `onExport`) y evento `export`.

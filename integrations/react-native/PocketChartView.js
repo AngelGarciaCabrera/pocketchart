@@ -16,6 +16,9 @@
  * Exportar (PNG, PDF, Excel): pasa `onExport` y recibirás { filename, format, mime, base64 }
  * para guardarlo o compartirlo (por ejemplo con expo-file-system y expo-sharing).
  * Sin `onExport`, el botón de descarga se oculta: dentro de una WebView no hay descargas.
+ *
+ * Para tu propio PDF (resumen, tablas…): `await ref.current.toImage({ width: 700 })` devuelve
+ * { base64, dataUrl, width, height } y `await ref.current.toData()` las filas de datos.
  */
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
@@ -57,9 +60,20 @@ const html = (bg) => `<!doctype html><html><head><meta charset="utf-8">
       if (msg.type === 'update') chart.update(msg.options);
       else if (msg.type === 'setData') chart.setData(msg.series);
       else if (msg.type === 'setLoading') chart.setLoading(msg.on, msg.opts || {});
-      else if (msg.type === 'call' && typeof chart[msg.method] === 'function') {
-        var res = chart[msg.method].apply(chart, msg.args || []);
-        if (res && typeof res.catch === 'function') res.catch(function(err){ send('error', String(err && err.message || err)); });
+      else if (msg.type === 'call' && typeof chart[msg.method] !== 'function') {
+        if (msg.id) send('result', { id: msg.id, error: 'Método desconocido: ' + msg.method });
+      }
+      else if (msg.type === 'call') {
+        // Con id, el resultado vuelve a React Native (ref.current.toImage(), toData()…).
+        Promise.resolve().then(function(){ return chart[msg.method].apply(chart, msg.args || []); }).then(function(v){
+          if (!msg.id) return;
+          if (v === chart) v = null;
+          else if (v && typeof v === 'object' && v.blob) { v = Object.assign({}, v); delete v.blob; }
+          send('result', { id: msg.id, value: v });
+        }, function(err){
+          var m = String(err && err.message || err);
+          if (msg.id) send('result', { id: msg.id, error: m }); else send('error', m);
+        });
       }
     }
   };
@@ -79,6 +93,7 @@ export const PocketChartView = forwardRef(function PocketChartView(
   ref
 ) {
   const web = useRef(null);
+  const pending = useRef(new Map()); // llamadas que esperan respuesta de la WebView
   const [height, setHeight] = useState((options.height || 260) + 80);
   const [ready, setReady] = useState(false);
   const handlers = { inspect: onInspect, zoom: onZoom, toggle: onToggle, ready: onReady, updated: onUpdated, error: onError, export: onExport };
@@ -102,6 +117,14 @@ export const PocketChartView = forwardRef(function PocketChartView(
   useEffect(() => { if (ready && series) post({ type: 'setData', series }); }, [series]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (ready) post({ type: 'setLoading', on: !!loading }); }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Llamada con respuesta: devuelve una promesa con el resultado del método dentro de la WebView.
+  const request = useCallback((method, ...args) => new Promise((resolve, reject) => {
+    const id = Math.random().toString(36).slice(2);
+    const timer = setTimeout(() => { pending.current.delete(id); reject(new Error(`PocketChart: ${method} no respondió`)); }, 20000);
+    pending.current.set(id, { resolve, reject, timer });
+    post({ type: 'call', method, args, id });
+  }), [post]);
+
   // Métodos: ref.current.resetZoom(), ref.current.replay(), ref.current.call('zoomTo', a, b)
   useImperativeHandle(ref, () => ({
     resetZoom: () => post({ type: 'call', method: 'resetZoom' }),
@@ -110,7 +133,10 @@ export const PocketChartView = forwardRef(function PocketChartView(
     call: (method, ...args) => post({ type: 'call', method, args }),
     // El archivo llega a la prop onExport: ref.current.export('pdf')
     export: (format = 'png', opts) => post({ type: 'call', method: 'export', args: [format, opts || {}] }),
-  }), [post]);
+    // Para tu propio PDF: imagen en base64 y datos en filas, sin descargar ni compartir nada.
+    toImage: (opts) => request('toImage', opts || {}),
+    toData: () => request('toData'),
+  }), [post, request]);
 
   const onMessage = useCallback((e) => {
     let msg; try { msg = JSON.parse(e.nativeEvent.data); } catch (_) { return; }
@@ -119,6 +145,11 @@ export const PocketChartView = forwardRef(function PocketChartView(
       post({ type: 'init', exportBridge: !!handlersRef.current.export, options: { fullscreen: false, ...options, series: series || [], loading } });
       setReady(true);
     } else if (msg.type === 'size') setHeight(msg.data);
+    else if (msg.type === 'result') {
+      const p = pending.current.get(msg.data.id); if (!p) return;
+      pending.current.delete(msg.data.id); clearTimeout(p.timer);
+      if (msg.data.error) p.reject(new Error(msg.data.error)); else p.resolve(msg.data.value);
+    }
     else handlersRef.current[msg.type]?.(msg.data);
   }, [options, series, loading, post]);
 

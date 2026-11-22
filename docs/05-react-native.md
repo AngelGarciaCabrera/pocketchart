@@ -82,7 +82,7 @@ export default function FeedScreen() {
 | `style` | Estilo del contenedor (márgenes, etc.). El alto se calcula solo. |
 | `onInspect`, `onZoom`, `onToggle`, `onReady`, `onUpdated`, `onError` | Eventos |
 | `onExport` | Recibe el archivo exportado (PNG, PDF, Excel). Ver *Paso 6* |
-| `ref` | `ref.current.resetZoom()`, `.replay()`, `.setLoading(true)`, `.export('pdf')`, `.call('zoomTo', a, b)` |
+| `ref` | `ref.current.resetZoom()`, `.replay()`, `.setLoading(true)`, `.export('pdf')`, `await .toImage()`, `await .toData()`, `.call('zoomTo', a, b)` |
 
 ## Paso 4. Modo oscuro
 
@@ -134,6 +134,42 @@ const guardar = async ({ filename, mime, base64 }) => {
 ```
 
 `onExport` recibe `{ filename, format, mime, base64 }`. Con React Native CLI puedes usar `react-native-fs` y `react-native-share` de la misma forma.
+
+## Paso 7. El gráfico dentro del PDF de tu app
+
+Si tu app ya genera su propio PDF (resumen, tablas…), no uses el PDF de PocketChart: pide sólo la imagen con `toImage()` y los datos con `toData()`. No descargan ni comparten nada; devuelven una promesa.
+
+```bash
+npx expo install expo-print expo-sharing
+```
+
+```jsx
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+
+const chartRef = useRef(null);
+
+const generarInforme = async () => {
+  const img = await chartRef.current.toImage({ width: 700, header: false, background: '#ffffff' });
+  const { columns, formatted } = await chartRef.current.toData();
+
+  const html = `
+    <h1>Informe de ventas</h1>
+    <p>${resumen}</p>
+    <img src="${img.dataUrl}" style="width:100%" />
+    <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%">
+      <tr>${columns.map((c) => `<th>${c}</th>`).join('')}</tr>
+      ${formatted.map((r) => `<tr>${r.map((v) => `<td>${v}</td>`).join('')}</tr>`).join('')}
+    </table>`;
+
+  const { uri } = await Print.printToFileAsync({ html });
+  await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
+};
+
+<PocketChartView ref={chartRef} options={opciones} series={series} />
+```
+
+`toImage()` devuelve `{ base64, dataUrl, width, height, mime }`. Usa `base64` si tu librería de PDF lo pide así. Si además quieres que el botón de descarga sólo ofrezca la imagen, pasa `options={{ export: { formats: ['png'] } }}` junto con `onExport`.
 
 ## Formatos con funciones
 

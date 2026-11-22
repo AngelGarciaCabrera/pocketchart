@@ -174,6 +174,7 @@ PocketChart.create('#grafico', {
 |---|---|---|
 | `type` | `'line'` | `line`, `area`, `bar`, `scatter`, `pie`, `donut`. Cada serie puede tener su propio `type` (mixtos) |
 | `series` | `[]` | `{ name, data, unit?, color?, type?, smooth?, stack?, format? }` |
+| `toImage()`, `toData()` | | Imagen y datos del gráfico para tu propio PDF. Ver *Insertar el gráfico en el PDF de tu app* |
 | `export` | ver *Exportar* | Botón de descarga y formatos (PNG, PDF, Excel, CSV). `false` lo oculta |
 | `stack` | `false` | `true` apila barras, áreas y líneas; `'percent'` las apila al 100 %. Ver *Apilado* |
 | `data` | | `[y, ...]`, `[[x, y], ...]` o `[{ x, y }]` / `[{ label, value }]`. `x` puede ser `Date`, ISO, epoch ms, número o texto |
@@ -234,6 +235,44 @@ create('#ventas', { export: false });
 ```
 
 El evento `export` avisa cada vez que se genera un archivo: `{ format, filename, size }`.
+
+> El PDF de `export('pdf')` contiene **sólo el gráfico**. Si tu app arma un PDF propio con más secciones (resumen, tablas, firmas…), sigue armándolo en tu app y usa `toImage()` y `toData()` para meter el gráfico y sus datos (ver abajo).
+
+## Insertar el gráfico en el PDF de tu app
+
+`toImage()` devuelve la imagen sin descargar nada, lista para cualquier generador de PDF (jsPDF, pdfmake, PDFKit, expo-print, el backend…). `toData()` devuelve los mismos datos en filas para tus tablas.
+
+```js
+const img = await chart.toImage({
+  width: 700,          // ancho fijo, para que salga igual en cualquier pantalla
+  header: false,       // sin título: tu PDF ya tiene sus encabezados
+  background: '#fff',  // o 'transparent' (sólo PNG)
+});
+// img = { dataUrl, base64, blob, width, height, mime }
+
+const { columns, rows, formatted } = chart.toData();
+// columns: ['Categoría', 'Tienda (USD)', 'Online (USD)']
+// rows: valores reales (fechas como Date) · formatted: el mismo texto que el tooltip
+```
+
+Ejemplo con [jsPDF](https://github.com/parallax/jsPDF):
+
+```js
+import { jsPDF } from 'jspdf';
+
+const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+doc.setFontSize(18); doc.text('Informe de ventas', 40, 50);
+doc.setFontSize(11); doc.text(resumen, 40, 72);
+
+const img = await chart.toImage({ width: 700, header: false, background: '#fff' });
+const w = 515, h = w * img.height / img.width;          // ancho útil de un A4 con márgenes
+doc.addImage(img.dataUrl, 'PNG', 40, 90, w, h);
+
+// … tus tablas con chart.toData().formatted (por ejemplo con jspdf-autotable)
+doc.save('informe.pdf');
+```
+
+Si sólo quieres que el usuario descargue la imagen, deja en el menú únicamente el PNG: `export: { formats: ['png'] }`.
 
 ## Apilado
 

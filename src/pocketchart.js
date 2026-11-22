@@ -621,29 +621,32 @@ export class PocketChart {
   }
 
   /** Dibuja el gráfico en su estado final (sin tooltip ni animación) en otro lienzo. */
-  _snapshotCanvas(scale) {
-    const c = this.$canvas, W = c._w, H = c._h;
+  _snapshotCanvas(scale, w, h) {
+    const c = this.$canvas, W0 = c._w, H0 = c._h, W = w || W0, H = h || H0;
     const off = document.createElement('canvas');
     off.width = Math.round(W * scale); off.height = Math.round(H * scale);
     const ctx = off.getContext('2d'); ctx.setTransform(scale, 0, 0, scale, 0, 0);
     const keep = { ctx: this.ctx, _inspect: this._inspect, _enter: this._enter, _enterPending: this._enterPending, _morph: this._morph, _yCur: this._yCur, _morphK: this._morphK };
     try {
       Object.assign(this, { ctx, _inspect: null, _enter: null, _enterPending: false, _morph: null, _yCur: null });
+      c._w = W; c._h = H; this._catW = null; // tamaño propio (p. ej. ancho de una hoja de PDF)
       this._render();
-    } finally { Object.assign(this, keep); this.invalidate(); }
+    } finally { c._w = W0; c._h = H0; this._catW = null; Object.assign(this, keep); this.invalidate(); }
     return off;
   }
 
   /** Imagen completa: título, subtítulo, leyenda y gráfico. */
-  _composeImage(scale) {
-    const EX = this._exportOpts || DEFAULTS.export, C = this._colors, o = this.opts;
+  _composeImage(scale, io = {}) {
+    const EX = this._exportOpts || DEFAULTS.export, C = this._colors, o = io.header === false ? { ...this.opts, title: '', subtitle: '' } : this.opts;
     scale = scale || EX.scale || 3;
-    const plot = this._snapshotCanvas(scale);
-    const W = this.$canvas._w, H = this.$canvas._h, pad = 16, font = C.font;
+    const pad = io.padding ?? 16, font = C.font;
+    // Ancho total pedido → ancho del área de dibujo. El alto es el del gráfico (o `plotHeight`).
+    const W = io.width ? Math.max(120, io.width - pad * 2) : this.$canvas._w, H = io.plotHeight || this.$canvas._h;
+    const plot = this._snapshotCanvas(scale, W, H);
     const mc = document.createElement('canvas').getContext('2d');
     // Leyenda: elementos visibles, en varias líneas si hace falta
     const items = this._legendItems().filter((it) => !this._hidden.has(it.key));
-    const showLegend = items.length > 1 && o.legend.show !== false;
+    const showLegend = io.legend !== false && items.length > 1 && o.legend.show !== false;
     mc.font = `500 12.5px ${font}`;
     const lines = []; let line = [], lw = 0;
     if (showLegend) items.forEach((it) => {
@@ -660,7 +663,8 @@ export class PocketChart {
     const out = document.createElement('canvas');
     out.width = Math.round(TW * scale); out.height = Math.round(TH * scale);
     const ctx = out.getContext('2d'); ctx.scale(scale, scale);
-    ctx.fillStyle = EX.background || C.bg || '#fff'; ctx.fillRect(0, 0, TW, TH);
+    const bg = io.background !== undefined ? io.background : EX.background || C.bg || '#fff';
+    if (bg && bg !== 'transparent') { ctx.fillStyle = bg; ctx.fillRect(0, 0, TW, TH); }
     ctx.textBaseline = 'top'; ctx.textAlign = 'left';
     if (o.title) { ctx.fillStyle = C.fg; ctx.font = `600 16px ${font}`; ctx.fillText(o.title, pad, y); y += titleH; }
     if (o.subtitle) { ctx.fillStyle = C.muted; ctx.font = `13px ${font}`; ctx.fillText(o.subtitle, pad, y); y += subH; }
@@ -694,6 +698,37 @@ export class PocketChart {
     const head = [{ v: this.opts.x.label || (this._xType === 'time' ? this.t.date : this._xType === 'category' ? this.t.category : 'X'), t: 's' },
       ...this._series.map((s) => ({ v: s.unit ? `${s.name} (${s.unit})` : s.name, t: 's' }))];
     return [head, ...keys.map((x, i) => [xCell(x), ...look.map((m) => ({ v: m.get(x), t: 'n' }))])];
+  }
+
+  /**
+   * Imagen del gráfico para insertarla en tu propio documento (PDF de la app, correo, informe).
+   * No descarga nada. `opts`: { format: 'png'|'jpeg', scale, width, plotHeight, header, legend, padding, background, quality }.
+   * Devuelve { dataUrl, base64, blob, width, height, mime } (ancho y alto en px CSS, sin multiplicar por `scale`).
+   */
+  async toImage(opts = {}) {
+    const EX = this._exportOpts || DEFAULTS.export, scale = opts.scale || EX.scale || 3;
+    const jpeg = opts.format === 'jpeg' || opts.format === 'jpg', mime = jpeg ? 'image/jpeg' : 'image/png';
+    const img = this._composeImage(scale, jpeg && opts.background === 'transparent' ? { ...opts, background: undefined } : opts);
+    const dataUrl = img.toDataURL(mime, opts.quality ?? 0.92);
+    const blob = await canvasBlob(img, mime, opts.quality ?? 0.92);
+    return { dataUrl, base64: dataUrl.slice(dataUrl.indexOf(',') + 1), blob, mime, width: img.width / scale, height: img.height / scale };
+  }
+
+  /**
+   * Los datos del gráfico como tabla, para las tablas de tu PDF o informe.
+   * Devuelve { columns, rows, formatted }: `rows` con valores reales (fechas como Date),
+   * `formatted` con los mismos datos ya formateados como texto (como en el tooltip).
+   */
+  toData() {
+    const t = this._dataRows(), head = t[0];
+    const valueOf = (c) => (c == null || c.v == null ? null : c.t === 'd' ? new Date(c.raw) : c.v);
+    const sers = this._isPie ? [this._series[0]] : this._series;
+    const rows = t.slice(1).map((r) => r.map(valueOf));
+    const formatted = t.slice(1).map((r) => r.map((c, i) => {
+      if (i === 0) return c.t === 'd' ? this._fmtXFull(c.raw) : c.t === 'n' ? this._nf(4).format(c.v) : String(c.v ?? '');
+      return c.v == null ? '' : this._fmtY(c.v, sers[i - 1] && { ...sers[i - 1], unit: '' }); // la unidad ya va en la columna
+    }));
+    return { columns: head.map((c) => String(c.v)), rows, formatted };
   }
 
   /**

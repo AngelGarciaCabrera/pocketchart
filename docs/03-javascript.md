@@ -96,6 +96,8 @@ const { blob } = await chart.export('xlsx', { download: false }); // sólo el ar
 
 Opciones (formatos, nombre, resolución, tamaño de página) en la [referencia](07-referencia.md#exportar-png-pdf-excel).
 
+El PDF de `export('pdf')` es sólo el gráfico. Si tu app arma un PDF con más secciones, usa `await chart.toImage({ width: 700, header: false })` y `chart.toData()` y mételos en tu documento: ejemplo con jsPDF en la [referencia](07-referencia.md#insertar-el-gráfico-en-el-pdf-de-tu-app).
+
 ## Paso 6. Formatos propios
 
 ```js

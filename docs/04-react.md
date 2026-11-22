@@ -72,6 +72,10 @@ const chartRef = useRef(null);
 <button onClick={() => chartRef.current.replay()}>Repetir animación</button>
 <button onClick={() => chartRef.current.export('pdf')}>Descargar PDF</button>
 <button onClick={() => chartRef.current.export('xlsx')}>Descargar Excel</button>
+
+// Para tu propio PDF: imagen y datos, sin descargar nada
+const img = await chartRef.current.toImage({ width: 700, header: false });
+const { columns, formatted } = chartRef.current.toData();
 ```
 
 ## Next.js

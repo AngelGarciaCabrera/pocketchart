@@ -59,6 +59,25 @@ export interface ExportOptions {
   onExport?: ((blob: Blob, filename: string, format: ExportFormat) => void | Promise<void>) | null;
 }
 export interface ExportResult { blob: Blob; filename: string; format: ExportFormat }
+export interface ImageOptions {
+  format?: 'png' | 'jpeg';
+  /** Resolución (por defecto la de `export.scale`, 3). */
+  scale?: number;
+  /** Ancho total de la imagen en px CSS (por defecto, el del gráfico en pantalla). */
+  width?: number;
+  /** Alto del área de dibujo en px CSS (por defecto, el de pantalla). */
+  plotHeight?: number;
+  /** Incluir título y subtítulo (por defecto true). */
+  header?: boolean;
+  /** Incluir la leyenda (por defecto true). */
+  legend?: boolean;
+  padding?: number;
+  /** Color de fondo, o 'transparent' (sólo PNG). */
+  background?: string;
+  quality?: number;
+}
+export interface ImageResult { dataUrl: string; base64: string; blob: Blob; mime: string; width: number; height: number }
+export interface DataTable { columns: string[]; rows: (string | number | Date | null)[][]; formatted: string[][] }
 
 export interface PocketChartOptions {
   type?: ChartType;
@@ -141,6 +160,10 @@ export declare class PocketChart {
   export(format?: ExportFormat, opts?: ExportOptions & { download?: boolean }): Promise<ExportResult>;
   /** Genera el archivo sin descargarlo. */
   toBlob(format?: ExportFormat, opts?: ExportOptions): Promise<Blob>;
+  /** Imagen del gráfico para insertarla en tu propio PDF o informe (no descarga nada). */
+  toImage(opts?: ImageOptions): Promise<ImageResult>;
+  /** Datos en filas para las tablas de tu PDF o informe. */
+  toData(): DataTable;
   invalidate(): void;
   destroy(): void;
 }
