@@ -173,12 +173,33 @@ const generarInforme = async () => {
 
 ## Formatos con funciones
 
-Las funciones (`y.format`, `tooltip.format`…) se envían a la WebView como texto. Escríbelas **sin usar variables de fuera de la función**:
+Las funciones (`y.format`, `yAxis.format`, `tooltip.format`…) se envían a la WebView como texto. Escríbelas **sin usar variables de fuera de la función**:
 
 ```jsx
 options={{ y: { format: (v) => '$' + v.toFixed(2) } }}          // ✅
 options={{ y: { format: (v) => moneda + v.toFixed(2) } }}        // ❌ `moneda` no existe dentro de la WebView
 ```
+
+## Ejes Y múltiples
+
+Cada serie puede tener su propia escala con `yAxis`. Funciona igual que en la web (ver *Ejes Y múltiples* en la referencia):
+
+```jsx
+<PocketChartView
+  options={{
+    type: 'line',
+    categories: dias,
+    series: [
+      { name: 'pH', data: ph, yAxis: { min: 0, max: 14, title: 'pH', format: (v) => v.toFixed(1) } },
+      { name: 'EC', unit: 'µS/cm', data: ec, yAxis: { min: 0, max: 5000, opposite: true, title: 'EC' } },
+      { name: 'Volumen', type: 'bar', unit: 'L', data: litros, yAxis: { show: false } },
+    ],
+  }}
+  onInspect={(sel) => console.log(sel?.points.map((p) => [p.series, p.y, p.yAxis?.max]))}
+/>
+```
+
+`yAxis.format` viaja a la WebView como texto con el prefijo `fn:`, igual que `y.format`, así que tampoco puede usar variables de fuera de la función.
 
 ## Consejos de rendimiento
 

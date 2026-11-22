@@ -1,5 +1,13 @@
 # Cambios
 
+## 0.7.0 — 2026-11-22
+- Ejes Y múltiples: `yAxis: { min, max, opposite, show, id, format, title }` por serie, cada uno con su escala y del color de su serie.
+- Las series comparten eje por `id` o por mismo `min`/`max` y lado; varios ejes por lado se colocan uno junto a otro y el área se ajusta.
+- Ocultar una serie quita su eje con transición; el zoom solo cambia X y los ejes fijos no se mueven.
+- Tooltip y evento `inspect` con el valor real, la unidad y el eje de cada serie. El apilado solo junta series del mismo eje.
+- `y.title` para titular el eje principal.
+- Sin `yAxis` el gráfico es idéntico a la 0.6.0.
+
 ## 0.6.0 — 2026-11-22
 - `toImage()`: imagen del gráfico (PNG o JPEG) en dataURL, base64 y Blob, sin descargar nada, con ancho fijo, sin título o sin leyenda. Para insertarla en el PDF que arma tu app.
 - `toData()`: los datos en filas (valores reales y texto formateado) para las tablas de ese PDF.

@@ -626,12 +626,14 @@ export class PocketChart {
     const off = document.createElement('canvas');
     off.width = Math.round(W * scale); off.height = Math.round(H * scale);
     const ctx = off.getContext('2d'); ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    const keep = { ctx: this.ctx, _inspect: this._inspect, _enter: this._enter, _enterPending: this._enterPending, _morph: this._morph, _yCur: this._yCur, _morphK: this._morphK };
+    const keep = { ctx: this.ctx, _inspect: this._inspect, _enter: this._enter, _enterPending: this._enterPending, _morph: this._morph, _yCur: this._yCur, _morphK: this._morphK, _padCur: this._padCur, _lastT: this._lastT };
+    const axCur = (this._axisList || []).map((a) => a.cur);
+    (this._axisList || []).forEach((a) => (a.cur = null));
     try {
-      Object.assign(this, { ctx, _inspect: null, _enter: null, _enterPending: false, _morph: null, _yCur: null });
+      Object.assign(this, { ctx, _inspect: null, _enter: null, _enterPending: false, _morph: null, _yCur: null, _padCur: null });
       c._w = W; c._h = H; this._catW = null; // tamaño propio (p. ej. ancho de una hoja de PDF)
       this._render();
-    } finally { c._w = W0; c._h = H0; this._catW = null; Object.assign(this, keep); this.invalidate(); }
+    } finally { c._w = W0; c._h = H0; this._catW = null; (this._axisList || []).forEach((a, i) => (a.cur = axCur[i])); Object.assign(this, keep); this.invalidate(); }
     return off;
   }
 
@@ -894,6 +896,7 @@ export class PocketChart {
         curve: s.curve || ((s.smooth ?? o.smooth) === false ? 'linear' : (o.line && o.line.curve) || 'smooth'),
         lineWidth: s.lineWidth, dash: s.dash, fillOpacity: s.fillOpacity, markers: s.markers, radius: s.radius,
         stackOpt: s.stack,
+        yAxisOpt: isObj(s.yAxis) ? s.yAxis : null,
         unit: s.unit || '',
         format: s.format || null,
         points: pts,
@@ -932,6 +935,7 @@ export class PocketChart {
     this._catW = null; this._navKey = null;
     this._yCur = null;
     this._inspect = null;
+    this._buildAxes();
     this._computeStacks();
     this._renderHeader();
     this._renderLegend();
@@ -945,14 +949,20 @@ export class PocketChart {
   _computeStacks() {
     const o = this.opts, pct = o.stack === 'percent';
     const groups = new Map();
-    this._stacked = false;
+    this._stacked = false; this._stackAxes = null;
     (this._series || []).forEach((s) => {
       s.points.forEach((q) => { q.y = q.v; q.below = null; q.edge = false; });
       s._pyr = undefined; s.stackKey = null;
       if (this._isPie || s.type === 'scatter' || s.stackOpt === false) return;
       const name = typeof s.stackOpt === 'string' ? s.stackOpt : s.stackOpt === true || o.stack ? 'all' : null;
       if (!name) return;
-      s.stackKey = s.type + ':' + name;
+      s.stackKey = s.type + ':' + name + (this._multi ? '@' + s.axis.key : '');
+      if (this._multi) {
+        // Apilar sólo tiene sentido en un mismo eje: un grupo que mezcla ejes se separa por eje.
+        const g = (this._stackAxes ||= new Map()), k = s.type + ':' + name;
+        if (g.has(k) && g.get(k) !== s.axis.key && !this._stackWarned) { this._stackWarned = true; console.warn(`PocketChart: el grupo apilado "${name}" mezcla ejes Y; se apila por separado en cada eje.`); }
+        if (!g.has(k)) g.set(k, s.axis.key);
+      }
       this._stacked = true;
       if (this._hidden.has(s.key)) return;
       if (!groups.has(s.stackKey)) groups.set(s.stackKey, []);
@@ -972,6 +982,155 @@ export class PocketChart {
       pos.forEach((e) => (e.q.edge = true)); neg.forEach((e) => (e.q.edge = true));
     });
     this._dataVer = (this._dataVer || 0) + 1;
+  }
+
+  /* ---------- Ejes Y ----------
+   * Sin `yAxis` en ninguna serie hay un solo eje (el de siempre, `opts.y`) y se dibuja igual que antes.
+   * Con `yAxis`, cada serie usa su escala; las que comparten `id`, o `min`, `max` y lado, comparten eje. */
+  _buildAxes() {
+    const o = this.opts, axes = new Map();
+    this._multi = !this._isPie && (this._series || []).some((s) => s.yAxisOpt);
+    (this._series || []).forEach((s) => {
+      const Y = s.yAxisOpt;
+      let key, def;
+      if (!Y) {
+        key = '__default';
+        def = { min: o.y.min, max: o.y.max, opposite: false, show: (o.axis || {}).y !== false, format: o.y.format || null, zero: o.y.zero, title: o.y.title || '' };
+      } else {
+        const fixed = Y.min != null && Y.max != null && +Y.max > +Y.min;
+        key = Y.id != null ? 'id:' + Y.id : fixed ? `mm:${+Y.min}|${+Y.max}|${Y.opposite ? 'R' : 'L'}` : 'auto:' + s.key;
+        def = { min: Y.min ?? null, max: Y.max ?? null, opposite: !!Y.opposite, show: Y.show !== false, format: Y.format || null, zero: Y.zero ?? null, title: Y.title || '' };
+      }
+      let ax = axes.get(key);
+      if (!ax) axes.set(key, (ax = { key, id: Y && Y.id != null ? Y.id : key === '__default' ? 'default' : key, ...def, series: [], cur: null }));
+      else { if (!ax.format && def.format) ax.format = def.format; if (!ax.title && def.title) ax.title = def.title; }
+      ax.series.push(s); s.axis = ax;
+    });
+    this._axisList = [...axes.values()];
+    this._padCur = null;
+  }
+
+  /** Activa la escala de un eje: a partir de aquí _sy, _pixelPoints y las barras la usan. */
+  _useAxis(ax) {
+    if (!ax || !ax.cur) return;
+    this._yCur = ax.cur; this._baseVal = clamp(0, ax.cur[0], ax.cur[1]);
+  }
+
+  /** Dominio objetivo de un eje (mismas reglas que el eje único, por eje). */
+  _axisTarget(ax) {
+    const [v0, v1] = this._view;
+    const vis = ax.series.filter((s) => !this._hidden.has(s.key));
+    const key = v0 + '|' + v1 + '|' + this._dataVer + '|' + vis.map((s) => s.key).join(',');
+    if (ax._tc && ax._tc.key === key) return ax._tc.val;
+    let lo, hi;
+    if (ax.min != null && ax.max != null && +ax.max > +ax.min) { lo = +ax.min; hi = +ax.max; } // fijo: ni zoom ni datos lo cambian
+    else {
+      lo = Infinity; hi = -Infinity;
+      vis.forEach((s) => {
+        const p = s.points;
+        const a = Math.max(0, lowerBound(p, v0) - 1), b = Math.min(p.length, lowerBound(p, v1) + 1);
+        const mm = this._rangeMinMax(s, a, b);
+        if (mm[0] < lo) lo = mm[0]; if (mm[1] > hi) hi = mm[1];
+      });
+      if (!isFinite(lo)) { lo = 0; hi = 1; }
+      const zero = ax.zero ?? vis.some((s) => s.type === 'bar' || s.type === 'area' || s.stackKey);
+      if (zero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
+      const pct = this._pct && vis.some((s) => s.stackKey);
+      if (pct) { lo = Math.min(lo, 0) < -1e-9 ? -100 : 0; hi = 100; }
+      if (ax.min != null) lo = +ax.min;
+      if (ax.max != null) hi = +ax.max;
+      if (hi === lo) { hi += Math.abs(hi) * 0.1 || 1; lo -= zero && lo === 0 ? 0 : Math.abs(lo) * 0.1 || 1; }
+      const pad = pct ? 0 : (hi - lo) * 0.06;
+      if (ax.max == null) hi += pad;
+      if (ax.min == null && !(zero && lo === 0)) lo -= pad;
+    }
+    ax._tc = { key, val: [lo, hi] };
+    return ax._tc.val;
+  }
+
+  _fmtAxisTick(ax, v, step) {
+    if (ax.format) return ax.format(v);
+    if (ax.key === '__default') return this._fmtYTick(v, step);
+    const t = this._fmtTick(v, step, true);
+    return this._pct && ax.series.some((s) => s.stackKey) ? t + '%' : t;
+  }
+
+  /** Ejes, cuadrícula y eje X cuando hay varios ejes Y. Deja activo el eje principal. */
+  _renderAxesMulti(W, H) {
+    const ctx = this.ctx, C = this._colors, G = this.opts.grid || {}, AX = this.opts.axis || {};
+    const dt = Math.min(64, this._now - (this._lastT || this._now)); this._lastT = this._now;
+    const snap = !this._animOn || this._enter, k = 1 - Math.exp(-dt / 55);
+    let moving = false;
+    const ease = (cur, t, tol) => { const d = t - cur; if (Math.abs(d) > tol) { moving = true; return cur + d * k; } return t; };
+    const yCount = Math.max(2, Math.floor(H / 56));
+    const active = this._axisList.filter((ax) => ax.series.some((s) => !this._hidden.has(s.key)));
+    ctx.font = `11px ${C.font}`;
+    active.forEach((ax) => {
+      const t = this._axisTarget(ax);
+      if (!ax.cur || snap) ax.cur = t.slice();
+      else for (let i = 0; i < 2; i++) ax.cur[i] = ease(ax.cur[i], t[i], (t[1] - t[0]) * 0.002);
+      ax.step = niceStep(t[1] - t[0], yCount);
+      ax.ticks = [];
+      for (let v = Math.ceil(ax.cur[0] / ax.step) * ax.step; v <= ax.cur[1] + ax.step * 1e-6; v += ax.step) ax.ticks.push(Math.abs(v) < ax.step * 1e-9 ? 0 : v);
+      ax.labels = ax.ticks.map((v) => this._fmtAxisTick(ax, v, ax.step));
+      ax.w = ax.show ? Math.max(32, Math.max(...ax.labels.map((l) => this._mw(l)), this._mw(this._fmtAxisTick(ax, t[0], ax.step)), this._mw(this._fmtAxisTick(ax, t[1], ax.step))) + 12) : 0;
+      ax.color = (ax.series.find((s) => !this._hidden.has(s.key)) || ax.series[0]).color;
+    });
+    const left = active.filter((a) => a.show && !a.opposite), right = active.filter((a) => a.show && a.opposite);
+    const tgt = { l: left.length ? left.reduce((n, a) => n + a.w, 0) : 8, r: right.length ? right.reduce((n, a) => n + a.w, 0) : 8 };
+    // El área de dibujo se reajusta con transición cuando aparece o desaparece un eje.
+    if (!this._padCur || snap) this._padCur = { ...tgt };
+    else { this._padCur.l = ease(this._padCur.l, tgt.l, 0.3); this._padCur.r = ease(this._padCur.r, tgt.r, 0.3); }
+    if (moving) this.invalidate();
+    const titled = [...left, ...right].some((a) => a.title);
+    const top = titled ? 24 : 10;
+    const r = this._plotRect = { x: this._padCur.l, y: top, w: Math.max(10, W - this._padCur.l - this._padCur.r), h: Math.max(10, H - top - 26) };
+    const axisIn = this._enter ? clamp((this._now - this._enter.t0) / 300, 0, 1) : 1;
+    ctx.globalAlpha = axisIn;
+    // Cuadrícula: sigue al primer eje de la izquierda (o al primero visible)
+    const primary = this._primary = left[0] || active.find((a) => a.show) || active[0];
+    if (primary) {
+      this._useAxis(primary);
+      primary.ticks.forEach((v) => {
+        const y = Math.round(this._sy(v)) + 0.5;
+        if (y < r.y - 4 || y > r.y + r.h + 4) return;
+        if (G.show !== false || v === 0) {
+          ctx.strokeStyle = v === 0 ? C.axis : C.grid; ctx.lineWidth = 1;
+          ctx.setLineDash(G.dashed && v !== 0 ? [4, 4] : []);
+          ctx.beginPath(); ctx.moveTo(r.x, y); ctx.lineTo(r.x + r.w, y); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      });
+    }
+    // Cada eje: línea, marcas y etiquetas con el color de su serie
+    const drawAxis = (ax, edge, side) => {
+      this._useAxis(ax);
+      ctx.strokeStyle = ax.color; ctx.fillStyle = ax.color; ctx.lineWidth = 1;
+      const x = Math.round(edge) + 0.5;
+      ctx.beginPath(); ctx.moveTo(x, r.y); ctx.lineTo(x, r.y + r.h); ctx.stroke();
+      ctx.textBaseline = 'middle'; ctx.textAlign = side < 0 ? 'right' : 'left';
+      ax.ticks.forEach((v, i) => {
+        const y = Math.round(this._sy(v)) + 0.5;
+        if (y < r.y - 4 || y > r.y + r.h + 4) return;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + side * 3, y); ctx.stroke();
+        ctx.fillText(ax.labels[i], x + side * 6, y);
+      });
+      if (ax.title) {
+        ctx.save(); ctx.font = `600 10.5px ${C.font}`; ctx.textBaseline = 'top';
+        ctx.fillText(this._fitText(ax.title, Math.max(ax.w - 4, 24)), x + side * 2, 4);
+        ctx.restore();
+      }
+    };
+    let off = 0;
+    left.forEach((ax) => { drawAxis(ax, r.x - off, -1); off += ax.w; });
+    off = 0;
+    right.forEach((ax) => { drawAxis(ax, r.x + r.w + off, 1); off += ax.w; });
+    ctx.strokeStyle = C.axis; ctx.beginPath(); ctx.moveTo(r.x, r.y + r.h + 0.5); ctx.lineTo(r.x + r.w, r.y + r.h + 0.5); ctx.stroke();
+    ctx.textAlign = 'right';
+    if (AX.x !== false) this._renderXAxis(W, H);
+    ctx.globalAlpha = 1;
+    if (primary) this._useAxis(primary);
+    return r;
   }
 
   /** Recalcula el apilado tras mostrar u ocultar series, con transición. */
@@ -1043,14 +1202,16 @@ export class PocketChart {
   _df(opts) { const k = JSON.stringify(opts); return (this._dfc ||= {})[k] ||= new Intl.DateTimeFormat(this._locale, opts); }
   _fmtY(v, s) {
     if (v == null) return '–';
-    const f = (s && s.format) || this.opts.y.format;
+    const own = s && s.axis && s.axis.key !== '__default';
+    const f = (s && s.format) || (own ? null : this.opts.y.format);
     if (f) return f(v, s);
+    if (own && s.axis.format) { const t = s.axis.format(v); return s.unit ? `${t} ${s.unit}` : t; } // formato del eje + unidad
     const a = Math.abs(v);
     const txt = a >= 1e6 ? this._nf(1).format(v / 1e6) + 'M' : a >= 1e4 ? this._nf(1).format(v / 1e3) + 'k' : this._nf(a < 10 ? 2 : a < 100 ? 2 : 1).format(v);
     return s && s.unit ? `${txt} ${s.unit}` : txt;
   }
-  _fmtTick(v, step) {
-    const f = this.opts.y.format;
+  _fmtTick(v, step, raw) {
+    const f = raw ? null : this.opts.y.format;
     if (f) return f(v);
     const a = Math.max(Math.abs(v), Math.abs(step));
     if (a >= 1e6) return this._nf(2).format(v / 1e6) + 'M';
@@ -1506,6 +1667,9 @@ export class PocketChart {
     this._morphK = this._morph ? this._ease('easeInOut')(clamp((this._now - this._morph.t0) / this._morph.dur, 0, 1)) : 1;
     if (this._isPie) { this._renderPie(W, H); return; }
 
+    let r;
+    if (this._multi) r = this._renderAxesMulti(W, H);
+    else {
     // Eje Y animado suavemente hacia su objetivo (se adapta al zoom y a las series visibles).
     const target = this._yTarget();
     const dt = Math.min(64, this._now - (this._lastT || this._now)); this._lastT = this._now;
@@ -1526,7 +1690,7 @@ export class PocketChart {
     const yLabels = yTicks.map((v) => this._fmtYTick(v, yStep));
     // El ancho del eje usa la etiqueta más larga del dominio objetivo, así no "tiembla" durante la animación.
     const yW = Math.max(18, ...yLabels.map((l) => this._mw(l)), this._mw(this._fmtYTick(target[0], yStep)), this._mw(this._fmtYTick(target[1], yStep)));
-    const r = this._plotRect = { x: yW + 10, y: 10, w: Math.max(10, W - yW - 10 - 8), h: Math.max(10, H - 10 - 26) };
+    r = this._plotRect = { x: yW + 10, y: 10, w: Math.max(10, W - yW - 10 - 8), h: Math.max(10, H - 10 - 26) };
 
     const C = this._colors;
     // Rejilla + etiquetas Y
@@ -1551,11 +1715,13 @@ export class PocketChart {
     ctx.strokeStyle = C.axis; ctx.beginPath(); ctx.moveTo(r.x, r.y + r.h + 0.5); ctx.lineTo(r.x + r.w, r.y + r.h + 0.5); ctx.stroke();
     if (AX.x !== false) this._renderXAxis(W, H);
     ctx.globalAlpha = 1;
+    }
 
     // Series (recortadas al área de dibujo + animación de entrada)
     const A = this._anim;
     const enterType = this._enter ? A.enter : null;
     this._baseVal = clamp(0, this._yCur[0], this._yCur[1]);
+    const M = this._multi, on = (s) => { if (M) this._useAxis(s.axis); return s; }; // cada serie, en su eje
     ctx.save();
     ctx.beginPath();
     ctx.rect(r.x, 0, enterType === "draw" ? r.w * this._p(0) : r.w, H);
@@ -1566,11 +1732,12 @@ export class PocketChart {
     // Las barras apiladas del mismo grupo comparten hueco; las demás van una al lado de otra.
     const slots = new Map();
     bars.forEach((s) => { const k = s.stackKey || s.key; if (!slots.has(k)) slots.set(k, slots.size); });
-    bars.forEach((s) => this._drawBars(s, slots.get(s.stackKey || s.key), slots.size));
-    vis.filter((s) => s.type === 'area').forEach((s) => this._drawLine(s, true));
-    vis.filter((s) => s.type === 'line').forEach((s) => this._drawLine(s, false));
-    vis.filter((s) => s.type === 'scatter').forEach((s) => this._drawScatter(s));
+    bars.forEach((s) => this._drawBars(on(s), slots.get(s.stackKey || s.key), slots.size));
+    vis.filter((s) => s.type === 'area').forEach((s) => this._drawLine(on(s), true));
+    vis.filter((s) => s.type === 'line').forEach((s) => this._drawLine(on(s), false));
+    vis.filter((s) => s.type === 'scatter').forEach((s) => this._drawScatter(on(s)));
     ctx.restore();
+    if (M && this._primary) this._useAxis(this._primary);
 
     this._drawInspect();
     if (!this.$nav.hidden) this._renderNav();
@@ -1880,11 +2047,12 @@ export class PocketChart {
     const ref = this._refSeries(); if (!ref) return null;
     if (vis.every((s) => s.type === 'scatter')) {
       let best = null, bd = 44 * 44;
-      vis.forEach((s) => s.points.forEach((q) => {
+      vis.forEach((s) => (this._multi && this._useAxis(s.axis), s).points.forEach((q) => {
         if (q.y == null || q.x < this._view[0] || q.x > this._view[1]) return;
         const d = (this._sx(q.x) - px) ** 2 + (this._sy(q.y) - py) ** 2;
         if (d < bd) { bd = d; best = { s, q }; }
       }));
+      if (this._multi && this._primary) this._useAxis(this._primary);
       return best && { id: best.s.key + ':' + best.q.i, x: best.q.x, rows: [{ s: best.s, q: best.q }], scatter: true };
     }
     const i = nearestIndex(ref.points, clamp(this._invX(px), this._view[0], this._view[1]));
@@ -1900,7 +2068,7 @@ export class PocketChart {
     if (!hit) return;
     const changed = !this._inspect || this._inspect.id !== hit.id;
     this._inspect = { ...hit, py, touch };
-    if (changed) { if (touch) navigator.vibrate?.(3); this._emit('inspect', { x: hit.x, label: this._fmtXFull(hit.x), points: hit.rows.map((r) => ({ series: r.s.name, x: r.q.x, y: r.q.v, data: r.q.raw })) }); }
+    if (changed) { if (touch) navigator.vibrate?.(3); this._emit('inspect', { x: hit.x, label: this._fmtXFull(hit.x), points: hit.rows.map((r) => ({ series: r.s.name, x: r.q.x, y: r.q.v, data: r.q.raw, ...(this._multi ? { unit: r.s.unit, yAxis: { id: r.s.yAxisOpt && r.s.yAxisOpt.id != null ? r.s.yAxisOpt.id : null, min: r.s.axis.cur ? r.s.axis.cur[0] : r.s.axis.min, max: r.s.axis.cur ? r.s.axis.cur[1] : r.s.axis.max, opposite: r.s.axis.opposite } } : {}) })) }); }
     this.invalidate();
   }
 
@@ -1930,10 +2098,12 @@ export class PocketChart {
     let top = Infinity;
     ins.rows.forEach(({ s, q }) => {
       if (q.y == null) return;
+      if (this._multi) this._useAxis(s.axis);
       const y = this._sy(this._v(q));
       top = Math.min(top, y);
       if (s.type !== 'bar') this._dot(this._sx(q.x), y, 5, s.color, 2.5);
     });
+    if (this._multi && this._primary) this._useAxis(this._primary);
     // Valores en vivo dentro de los chips de la leyenda (sólo cuando cambia el punto: tocar el DOM es caro)
     if (this._chipFor !== ins.id) {
       this._chipFor = ins.id;

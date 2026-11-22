@@ -12,7 +12,7 @@ Librería de gráficos **mobile-first**, ligera (~21 KB gzip) y sin dependencias
 | Scroll horizontal para ver todo el rango | Pellizco para zoom, arrastre para moverse, inercia y un mini-mapa cuando hay zoom |
 | Tooltip lejos del gráfico o bajo el dedo | El tooltip flota junto al punto, por encima del dedo, y se reubica si no cabe |
 | Chips de series en varias filas apretadas | Leyenda en una sola fila deslizable; los chips muestran el valor del punto inspeccionado |
-| Series con unidades distintas mezcladas | `legend.mode: 'single'`: una serie a la vez con su propio eje, sin doble eje Y |
+| Series con unidades distintas mezcladas | `yAxis` por serie: cada magnitud con su escala y su eje del color de la serie. O `legend.mode: 'single'`: una serie a la vez |
 | Curvas que inventan picos | Curva monótona: nunca pasa por encima ni por debajo de los datos reales |
 | Pantalla completa que no funciona en iPhone | Usa la API nativa (y bloquea en horizontal en Android); en iOS usa un modo a pantalla completa propio |
 | Miles de puntos lentos | Reducción min/máx por píxel: dibuja 8.760 puntos sin perder picos |
@@ -173,7 +173,7 @@ PocketChart.create('#grafico', {
 | Opción | Por defecto | Descripción |
 |---|---|---|
 | `type` | `'line'` | `line`, `area`, `bar`, `scatter`, `pie`, `donut`. Cada serie puede tener su propio `type` (mixtos) |
-| `series` | `[]` | `{ name, data, unit?, color?, type?, smooth?, stack?, format? }` |
+| `series` | `[]` | `{ name, data, unit?, color?, type?, smooth?, stack?, format?, yAxis? }` |
 | `toImage()`, `toData()` | | Imagen y datos del gráfico para tu propio PDF. Ver *Insertar el gráfico en el PDF de tu app* |
 | `export` | ver *Exportar* | Botón de descarga y formatos (PNG, PDF, Excel, CSV). `false` lo oculta |
 | `stack` | `false` | `true` apila barras, áreas y líneas; `'percent'` las apila al 100 %. Ver *Apilado* |
@@ -185,6 +185,8 @@ PocketChart.create('#grafico', {
 | `x.format(v, 'tick'\|'full')` | | Formato propio del eje X |
 | `y.min`, `y.max`, `y.zero` | auto | Límites; `zero` fuerza incluir el 0 (activo por defecto en barras y áreas) |
 | `y.format(v)` | | Formato de valores |
+| `y.title` | | Texto encima del eje Y principal |
+| `series[].yAxis` | | `{ min?, max?, opposite?, show?, id?, format?, title?, zero? }`. Escala Y propia de la serie. Ver *Ejes Y múltiples* |
 | `legend.mode` | `'multi'` | `single` = una serie a la vez |
 | `legend.show` | `'auto'` | Se muestra si hay más de una serie |
 | `zoom`, `pan`, `hover`, `fullscreen`, `animate`, `hint` | `true` | Activar o desactivar comportamientos (`animate: false` apaga todas las animaciones) |
@@ -295,6 +297,47 @@ create('#tickets', { type: 'bar', stack: 'percent', categories: ['T1', 'T2', 'T3
 - Al ocultar una serie desde la leyenda, las demás se recolocan con una transición.
 - En HTML: `<pocket-chart type="bar" stack>` o `stack="percent"`.
 
+## Ejes Y múltiples
+
+Cuando un gráfico mezcla magnitudes distintas (pH de 0 a 14, EC de 0 a 5000, litros), cada serie puede tener su propia escala con `yAxis`:
+
+```js
+create('#feed', {
+  type: 'line',
+  categories: dias,
+  series: [
+    { name: 'pH', data: ph, yAxis: { min: 0, max: 14, title: 'pH', format: (v) => v.toFixed(1) } },
+    { name: 'EC', unit: 'µS/cm', data: ec, yAxis: { min: 0, max: 5000, opposite: true, title: 'EC' } },
+    { name: 'Volumen', type: 'bar', unit: 'L', data: litros, yAxis: { show: false } },
+  ],
+});
+```
+
+| `yAxis` | Por defecto | Qué hace |
+|---|---|---|
+| `min`, `max` | auto | Con los dos, el eje queda fijo: no cambia con los datos ni con el zoom |
+| `opposite` | `false` | `true` lo dibuja a la derecha |
+| `show` | `true` | `false` conserva la escala propia pero no dibuja el eje |
+| `id` | | Series con el mismo `id` comparten eje |
+| `format(v)` | | Formato de las etiquetas del eje y del valor en el tooltip |
+| `title` | | Texto corto encima del eje |
+| `zero` | auto | Incluir el 0 en un eje automático |
+
+Reglas:
+
+- **Agrupación:** comparten eje las series con el mismo `id`, o con el mismo `min`, `max` y lado. Si no, cada serie tiene el suyo.
+- **Varios ejes por lado:** se colocan uno junto a otro (unos 32 px cada uno) y el área del gráfico se estrecha.
+- **Color:** el eje toma el color de su (primera) serie.
+- **Ocultar una serie** desde la leyenda quita su eje, y el área se reajusta con una transición.
+- **Rejilla:** sigue al primer eje de la izquierda.
+- **Zoom:** solo cambia X. Los ejes con `min`/`max` fijos no se mueven; los automáticos se ajustan a lo visible.
+- **Tooltip:** muestra el valor real con la `unit` y el `format` del eje de cada serie.
+- **Tipos mezclados:** línea, barra y área pueden convivir, cada una en su eje.
+- **Apilado:** solo apila series del mismo eje. Si un grupo mezcla ejes, se apila por separado en cada eje y se avisa una vez en la consola.
+- **Evento `inspect`:** con ejes múltiples, cada punto incluye `unit` y `yAxis: { id, min, max, opposite }`, con el dominio actual del eje.
+- **Sin `yAxis`** en ninguna serie, el gráfico es exactamente igual que antes (un solo eje).
+- `y.title` pone un título encima del eje principal también sin ejes múltiples.
+
 ## Personalizar el estilo
 
 Variables CSS (en cualquier contenedor padre, incluido el `<pocket-chart>`):
@@ -350,7 +393,7 @@ demo/index.html           Demo móvil
 Decisiones:
 - **Canvas en vez de SVG**: rinde con miles de puntos en móviles modestos; el DOM sólo se usa para la cabecera, leyenda y tooltip (texto nítido y accesible).
 - **Web Component como capa universal**: cualquier framework o WebView lo usa sin adaptadores.
-- **Sin doble eje Y**: con unidades distintas se usa `legend.mode: 'single'`; dos escalas en un mismo gráfico se leen mal, sobre todo en pantallas pequeñas.
+- **Ejes Y opcionales**: por defecto hay un solo eje. Con `yAxis` en las series cada magnitud tiene su escala; cada eje usa el color de su serie para que se lea bien en pantallas pequeñas. Con `legend.mode: 'single'` se ve una serie a la vez.
 
 ## Construir
 

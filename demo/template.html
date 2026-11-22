@@ -111,6 +111,7 @@ h2:first-child{margin-top:4px}
         <article class="card"><div id="c-stack"></div><p class="desc" hidden>Barras apiladas: toca un mes para ver cada parte y el total.</p></article>
         <article class="card"><div id="c-stack-area"></div><p class="desc" hidden>Áreas apiladas: oculta una fuente en la leyenda y el resto se recoloca.</p></article>
         <article class="card"><div id="c-stack-pct"></div><p class="desc" hidden>Apilado al 100 %: compara el reparto, no el total.</p></article>
+        <article class="card"><div id="c-axes"></div><p class="desc" hidden>Ejes Y múltiples: pH, EC y volumen, cada uno con su escala. Oculta EC y su eje desaparece.</p></article>
         <article class="card"><div id="c-scatter"></div><p class="desc" hidden>Toca cerca de un punto: se elige el más próximo.</p></article>
         <article class="card"><div id="c-donut"></div><p class="desc" hidden>Toca una porción o un chip para ver su valor.</p></article>
       </div>
@@ -444,6 +445,17 @@ chart.on('inspect', (sel) =&gt; console.log(sel));</pre></div>
       { name: 'Baja', data: tri.map(() => Math.round(25 + rnd() * 30)) },
     ],
   }, 'pulse');
+
+  // 3e) Ejes Y múltiples (Feed History)
+  const fd = Array.from({ length: 14 }, (_, i) => 'D' + (i + 1));
+  demo('#c-axes', {
+    type: 'line', animation: { enter: 'draw', duration: 800 }, title: 'Feed History', subtitle: 'pH, EC y volumen por riego', lang: 'es', categories: fd,
+    series: [
+      { name: 'pH', data: fd.map((_, i) => +(5.9 + 0.25 * Math.sin(i / 2) + noise(0.08)).toFixed(2)), yAxis: { min: 0, max: 14, title: 'pH', format: (v) => v.toFixed(1) } },
+      { name: 'EC', unit: 'µS/cm', data: fd.map((_, i) => Math.round(1800 + 500 * Math.sin(i / 3) + rnd() * 250)), yAxis: { min: 0, max: 5000, opposite: true, title: 'EC' } },
+      { name: 'Volumen', type: 'bar', unit: 'L', data: fd.map(() => Math.round(8 + rnd() * 6)), yAxis: { min: 0, max: 40, show: false }, fillOpacity: 0.35 },
+    ],
+  }, 'wave');
 
   // 4) Scatter (3 grupos como máximo para que los colores se distingan)
   const grp = (cx, cy, n) => Array.from({ length: n }, () => [+(cx + noise(0.35)).toFixed(2), +(cy + noise(0.18)).toFixed(2)]);

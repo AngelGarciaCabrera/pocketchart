@@ -17,6 +17,25 @@ export type Curve = 'smooth' | 'linear' | 'step';
 
 export interface MarkerOptions { show?: 'auto' | boolean; size?: number; shape?: MarkerShape }
 
+/** Eje Y propio de una serie. Series con el mismo `id`, o con el mismo `min`/`max` y lado, comparten eje. */
+export interface YAxisOptions {
+  /** Límite inferior fijo. Con `min` y `max` el eje no cambia con los datos ni con el zoom. */
+  min?: number | null;
+  max?: number | null;
+  /** `true` dibuja el eje a la derecha. */
+  opposite?: boolean;
+  /** `false` conserva la escala propia pero no dibuja el eje. */
+  show?: boolean;
+  /** Agrupa varias series en un mismo eje. */
+  id?: string | number;
+  /** Formato de las etiquetas del eje y del tooltip de la serie. */
+  format?: (v: number) => string;
+  /** Texto corto encima del eje (p. ej. la unidad). */
+  title?: string;
+  /** Incluir el 0 en un eje automático. */
+  zero?: boolean | null;
+}
+
 export interface Series {
   name?: string;
   id?: string | number;
@@ -35,6 +54,8 @@ export interface Series {
   /** Grupo de apilado: `true` usa el grupo común, un texto crea un grupo propio, `false` la excluye. */
   stack?: boolean | string;
   format?: (value: number, series: Series) => string;
+  /** Escala Y propia. Sin `yAxis` en ninguna serie el gráfico usa un solo eje, como siempre. */
+  yAxis?: YAxisOptions;
 }
 
 export interface StyleOptions {
@@ -87,7 +108,7 @@ export interface PocketChartOptions {
   categories?: string[] | null;
   height?: number;
   x?: { type?: 'auto' | 'time' | 'linear' | 'category'; format?: (v: number, mode: 'tick' | 'full') => string };
-  y?: { min?: number | null; max?: number | null; zero?: boolean | null; format?: (v: number) => string };
+  y?: { min?: number | null; max?: number | null; zero?: boolean | null; format?: (v: number) => string; title?: string };
   smooth?: boolean;
   /** Apila barras, áreas y líneas: `true` suma los valores, `'percent'` los reparte al 100 %. */
   stack?: boolean | 'percent';
@@ -128,7 +149,13 @@ export interface PocketChartOptions {
 export interface InspectEvent {
   x?: number;
   label: string;
-  points: { series: string; x?: number; y: number | null; color?: string; data?: unknown }[];
+  points: {
+    series: string; x?: number; y: number | null; color?: string; data?: unknown;
+    /** Solo con ejes múltiples. */
+    unit?: string;
+    /** Solo con ejes múltiples: eje de la serie y su dominio actual. */
+    yAxis?: { id: string | number | null; min: number; max: number; opposite: boolean };
+  }[];
 }
 
 export interface ChartEvents {
