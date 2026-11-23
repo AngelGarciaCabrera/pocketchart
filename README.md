@@ -27,7 +27,7 @@ Ligera (~21 KB gzip), **sin dependencias**, y funciona en HTML, JavaScript, Reac
 ## Empezar en 30 segundos
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/AngelGarciaCabrera/pocketchart@v0.8.0/dist/pocketchart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/AngelGarciaCabrera/pocketchart@v0.8.1/dist/pocketchart.min.js"></script>
 
 <pocket-chart type="line" title="Ventas" animation="draw">
   <script type="application/json">
@@ -49,8 +49,17 @@ const chart = PocketChart.create('#grafico', {
 chart.load(() => fetch('/api/consumo').then((r) => r.json()));
 ```
 
-> La URL del CDN funciona cuando el repositorio está en GitHub con la etiqueta `v0.8.0`. Mientras tanto, usa `dist/pocketchart.min.js` directamente.
-> Para instalarlo con npm: `npm install github:AngelGarciaCabrera/pocketchart#v0.8.0`
+Con npm:
+
+```bash
+npm install pocketchart
+```
+
+```js
+import { create } from 'pocketchart';                              // JavaScript (ESM o require)
+import PocketChart from 'pocketchart/react';                       // React
+import { PocketChartView } from 'pocketchart/react-native';         // React Native (WebView)
+```
 
 ## Guías paso a paso
 
@@ -94,7 +103,7 @@ npm run build      # genera dist/ e integrations/react-native/pocketchart-lib.js
 npx serve .        # abre http://localhost:3000/demo/ o /examples/
 ```
 
-Para publicar una versión: actualiza `version` en `package.json` y `CHANGELOG.md`, ejecuta `npm run build`, haz commit y crea la etiqueta (`git tag v0.8.0 && git push --tags`). jsDelivr la sirve sola desde GitHub.
+Para publicar una versión: actualiza `version` en `package.json` y `CHANGELOG.md`, ejecuta `npm run build`, haz commit y publica un release en GitHub con la etiqueta `vX.Y.Z`. La acción `.github/workflows/publish.yml` lo sube a npm (necesita el secreto `NPM_TOKEN`). jsDelivr lo sirve solo desde GitHub y desde npm.
 
 ## Licencia
 

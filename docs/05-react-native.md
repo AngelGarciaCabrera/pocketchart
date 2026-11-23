@@ -19,9 +19,19 @@ npm install react-native-webview
 cd ios && pod install && cd ..
 ```
 
-## Paso 2. Copia los dos archivos del componente
+## Paso 2. Instala PocketChart
 
-Copia la carpeta [`integrations/react-native/`](../integrations/react-native/) a tu app, por ejemplo a `src/components/pocketchart/`:
+```bash
+npm install pocketchart
+```
+
+```jsx
+import { PocketChartView, PocketChartGroup } from 'pocketchart/react-native';
+```
+
+Ya viene compilado (sin JSX) y con tipos TypeScript. Para actualizar: `npm install pocketchart@latest`.
+
+**Alternativa sin npm:** copia la carpeta [`integrations/react-native/`](../integrations/react-native/) a tu app, por ejemplo a `src/components/pocketchart/`:
 
 ```
 src/components/pocketchart/

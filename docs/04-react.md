@@ -5,7 +5,7 @@
 ## Paso 1. Instala la librería
 
 ```bash
-npm install github:AngelGarciaCabrera/pocketchart
+npm install pocketchart
 ```
 
 > ¿Aún no está en GitHub? Copia `dist/pocketchart.esm.js` a `src/lib/` y cambia el `import` del componente a `./lib/pocketchart.esm.js`.

@@ -21,7 +21,7 @@
 ### Paso 1. Instala
 
 ```bash
-npm install github:AngelGarciaCabrera/pocketchart
+npm install pocketchart
 # o copia dist/pocketchart.esm.js dentro de tu proyecto
 ```
 

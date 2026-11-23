@@ -1,33 +1,7 @@
 {
   "name": "pocketchart",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Gráficos mobile-first, ligeros y sin dependencias. Gestos táctiles, animaciones y personalización completa. Funciona en HTML, JavaScript, React, React Native, Vue, Angular y más.",
-  "type": "module",
-  "main": "dist/pocketchart.min.js",
-  "module": "dist/pocketchart.esm.js",
-  "exports": {
-    ".": {
-      "types": "./types/pocketchart.d.ts",
-      "import": "./dist/pocketchart.esm.js",
-      "default": "./dist/pocketchart.min.js"
-    },
-    "./react": "./integrations/react/PocketChart.jsx",
-    "./react-native": "./integrations/react-native/PocketChartView.js"
-  },
-  "files": [
-    "dist",
-    "src",
-    "types",
-    "integrations"
-  ],
-  "scripts": {
-    "build": "node build.mjs"
-  },
-  "devDependencies": {
-    "esbuild": "0.24.0"
-  },
-  "license": "MIT",
-  "types": "types/pocketchart.d.ts",
   "keywords": [
     "charts",
     "mobile",
@@ -38,10 +12,77 @@
     "react-native",
     "graficos"
   ],
+  "homepage": "https://github.com/AngelGarciaCabrera/pocketchart#readme",
+  "bugs": {
+    "url": "https://github.com/AngelGarciaCabrera/pocketchart/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/AngelGarciaCabrera/pocketchart.git"
   },
+  "license": "MIT",
   "author": "AngelGarciaCabrera",
-  "sideEffects": true
+  "type": "module",
+  "main": "dist/pocketchart.cjs",
+  "module": "dist/pocketchart.esm.js",
+  "types": "types/pocketchart.d.ts",
+  "unpkg": "dist/pocketchart.min.js",
+  "jsdelivr": "dist/pocketchart.min.js",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./types/pocketchart.d.ts",
+        "default": "./dist/pocketchart.esm.js"
+      },
+      "require": {
+        "types": "./types/pocketchart.d.cts",
+        "default": "./dist/pocketchart.cjs"
+      },
+      "default": "./dist/pocketchart.esm.js"
+    },
+    "./react": {
+      "types": "./types/react.d.ts",
+      "default": "./dist/react.js"
+    },
+    "./react-native": {
+      "types": "./types/react-native.d.ts",
+      "default": "./dist/react-native.js"
+    },
+    "./dist/*": "./dist/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "types",
+    "integrations",
+    "CHANGELOG.md"
+  ],
+  "sideEffects": true,
+  "scripts": {
+    "build": "node build.mjs",
+    "prepublishOnly": "node build.mjs"
+  },
+  "peerDependencies": {
+    "react": ">=17",
+    "react-native": ">=0.70",
+    "react-native-webview": ">=11"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    },
+    "react-native-webview": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

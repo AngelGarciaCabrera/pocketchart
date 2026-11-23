@@ -1,5 +1,10 @@
 # Cambios
 
+## 0.8.1 — 2026-11-23
+- Listo para npm: `npm install pocketchart`. Funciona con `import` y con `require` (`dist/pocketchart.cjs`).
+- `pocketchart/react` y `pocketchart/react-native` vienen compilados (sin JSX) y con tipos TypeScript.
+- Publicación automática en npm al publicar un release en GitHub.
+
 ## 0.8.0 — 2026-11-22
 - Ejes que nunca pierden el contexto: los ejes X e Y no se salen ni se encima ninguna etiqueta (probado en 108 combinaciones de ancho, ejes y zoom); con muchos ejes, etiquetas compactas.
 - Zoom: botones − y +, barra con el rango visible y "Restablecer", zoom mínimo (`zoom.minPoints`), vista nunca vacía, fechas sin ambigüedad al acercar.

@@ -1,0 +1,26 @@
+# Publica en npm cada vez que se publica un release en GitHub (por ejemplo, v0.8.1).
+# Requiere el secreto NPM_TOKEN en Settings → Secrets and variables → Actions.
+name: Publicar en npm
+on:
+  release:
+    types: [published]
+permissions:
+  contents: read
+  id-token: write   # procedencia (provenance) del paquete
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - run: npm install --no-audit --no-fund
+      - name: Comprobar que la versión coincide con la etiqueta
+        run: |
+          V="$(node -p "require('./package.json').version")"
+          if [ "v$V" != "${GITHUB_REF_NAME}" ]; then echo "package.json dice $V y la etiqueta es ${GITHUB_REF_NAME}"; exit 1; fi
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
