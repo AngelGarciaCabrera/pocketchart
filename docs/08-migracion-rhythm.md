@@ -1,6 +1,6 @@
-# Migrar los gráficos de la app (v0.8.0)
+# Migrar los gráficos de la app (v0.9.0)
 
-Cada punto de la lista de requisitos y cómo se resuelve en PocketChart 0.8.0.
+Cada punto de la lista de requisitos y cómo se resuelve en PocketChart 0.9.0.
 
 ## A. Ejes que nunca pierden el contexto
 
@@ -66,6 +66,12 @@ Cada punto de la lista de requisitos y cómo se resuelve en PocketChart 0.8.0.
 | 33 | Ancho automático y centrado | Automático en ejes de tiempo, con `bar: { padding: 0.25 }` |
 | 34 | Total y orden al ocultar | Total en el tooltip (o `footer`), y el orden y los colores se mantienen |
 
+## G. Bandas de fondo (0.9.0)
+
+| # | Requisito | Cómo |
+|---|---|---|
+| 35 | Luces encendidas, riego… detrás del gráfico | Serie `type: 'band'` con `band: { threshold, opacity, edge, hold, labels }`, o `bands: [{ from, to, color }]` fijas. Ver *Bandas de fondo* en la referencia |
+
 ## Ejemplo: Feed History
 
 ```jsx
@@ -82,6 +88,7 @@ Cada punto de la lista de requisitos y cómo se resuelve en PocketChart 0.8.0.
     zoom: { minPoints: 5 },
   }}
   series={[
+    { name: 'LightsON', type: 'band', color: '#FFD60A', band: { labels: ['Off', 'On'] }, data: { x: horas, y: luces } },
     { name: 'pH', color: 'blue', curve: 'straight', data: ph, yAxis: { min: 0, max: 14, title: 'pH', format: 'decimal1' } },
     { name: 'pH set', color: 'grey', dash: [5, 4], curve: 'stepline', data: phSet, yAxis: { min: 0, max: 14, show: false } },
     { name: 'EC', color: 'red', unit: 'µS/cm', data: ec, yAxis: { min: 0, max: 5000, opposite: true, title: 'EC', format: 'compact' } },

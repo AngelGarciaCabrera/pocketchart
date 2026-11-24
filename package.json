@@ -1,6 +1,6 @@
 {
   "name": "pocketchart",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Gráficos mobile-first, ligeros y sin dependencias. Gestos táctiles, animaciones y personalización completa. Funciona en HTML, JavaScript, React, React Native, Vue, Angular y más.",
   "keywords": [
     "charts",

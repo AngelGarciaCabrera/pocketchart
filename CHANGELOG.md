@@ -1,5 +1,9 @@
 # Cambios
 
+## 0.9.0 — 2026-11-24
+- Bandas de fondo: series `type: 'band'` (`band: { threshold, opacity, edge, hold, labels }`) y bandas fijas `bands: [{ from, to, color }]`. Detrás de la rejilla y las series, sin eje Y, siguen al zoom y al pan, con chip en la leyenda, estado en tooltip, panel, `inspect`, `toImage` y `toData`/Excel.
+- Sin bandas, el gráfico se ve igual que en 0.8.1.
+
 ## 0.8.1 — 2026-11-23
 - Listo para npm: `npm install pocketchart`. Funciona con `import` y con `require` (`dist/pocketchart.cjs`).
 - `pocketchart/react` y `pocketchart/react-native` vienen compilados (sin JSX) y con tipos TypeScript.

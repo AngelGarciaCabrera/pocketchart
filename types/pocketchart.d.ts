@@ -68,7 +68,10 @@ export interface Series extends Omit<NumberFormatOptions, 'format'> {
   x?: ArrayLike<number | string>;
   y?: ArrayLike<number | null>;
   unit?: string;
-  type?: Exclude<ChartType, 'pie' | 'donut'>;
+  /** `'band'`: banda de fondo (luces encendidas, riego activo…). Ver `band`. */
+  type?: Exclude<ChartType, 'pie' | 'donut'> | 'band';
+  /** Solo con `type: 'band'`. */
+  band?: BandOptions;
   color?: string;
   colorDark?: string;
   curve?: Curve;
@@ -84,6 +87,31 @@ export interface Series extends Omit<NumberFormatOptions, 'format'> {
   format?: ((value: number, series: Series) => string) | NumberFormatOptions['format'];
   /** Escala Y propia. Sin `yAxis` en ninguna serie el gráfico usa un solo eje, como siempre. */
   yAxis?: YAxisOptions;
+}
+
+/** Banda de fondo a partir de una serie de lecturas (`type: 'band'`). */
+export interface BandOptions {
+  /** Encendida mientras el valor sea mayor que el umbral (por defecto 0.5). */
+  threshold?: number;
+  /** Opacidad del relleno (por defecto 0.12). */
+  opacity?: number;
+  /** Líneas finas en cada transición (por defecto true). */
+  edge?: boolean;
+  /** true (por defecto): la lectura i cubre [xᵢ, xᵢ₊₁). false: cruces del umbral interpolados. */
+  hold?: boolean;
+  /** Textos de [apagada, encendida] en tooltip, panel y toData (por defecto ['0', '1']). */
+  labels?: [string, string];
+}
+
+/** Banda fija (opción `bands`): sólo dibujo, sin leyenda ni tooltip. */
+export interface StaticBand {
+  from?: number | string | Date;
+  to?: number | string | Date;
+  color?: string;
+  colorDark?: string;
+  opacity?: number;
+  edge?: boolean;
+  name?: string;
 }
 
 export interface StyleOptions {
@@ -205,6 +233,8 @@ export interface PocketChartOptions {
   /** `padding`: hueco libre entre barras (0..1). En ejes de tiempo el ancho sigue a la separación entre fechas. */
   bar?: { radius?: number; width?: number; padding?: number | null };
   grid?: { show?: boolean; dashed?: boolean };
+  /** Bandas fijas de fondo (detrás de la rejilla y las series). */
+  bands?: StaticBand[];
   axis?: { x?: boolean; y?: boolean };
   donut?: { thickness?: number };
   /** Exportar a PNG, PDF, Excel o CSV. `false` oculta el botón. */
@@ -222,6 +252,8 @@ export interface InspectEvent {
     unit?: string;
     /** Solo con ejes múltiples: eje de la serie y su dominio actual. */
     yAxis?: { id: string | number | null; min: number; max: number; opposite: boolean };
+    /** Solo bandas: estado vigente en esa fecha. */
+    type?: 'band'; on?: boolean; state?: 'on' | 'off';
   }[];
 }
 

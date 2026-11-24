@@ -10,7 +10,7 @@ Al final del `<body>` o en el `<head>`:
 
 ```html
 <script src="pocketchart.min.js"></script>
-<!-- o desde el CDN: https://cdn.jsdelivr.net/gh/AngelGarciaCabrera/pocketchart@v0.8.1/dist/pocketchart.min.js -->
+<!-- o desde el CDN: https://cdn.jsdelivr.net/gh/AngelGarciaCabrera/pocketchart@v0.9.0/dist/pocketchart.min.js -->
 ```
 
 Esto registra automáticamente la etiqueta `<pocket-chart>`.

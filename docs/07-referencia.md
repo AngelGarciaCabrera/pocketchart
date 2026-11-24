@@ -211,6 +211,8 @@ PocketChart.create('#grafico', {
 | `fullscreen` | `true` | `'external'`: emite `fullscreenRequest` para que tu app abra su modal |
 | `lite` | `false` | Modo ligero para pantallas con varios gráficos |
 | `bar.padding` | | Hueco libre entre barras (0..1); en ejes de tiempo el ancho sigue a la separación entre fechas |
+| `series[].type: 'band'` | | Banda de fondo a partir de lecturas (luces, riego…). Ver *Bandas de fondo* |
+| `bands` | `[]` | Bandas fijas `{ from, to, color, colorDark?, opacity?, edge? }` |
 
 ## Exportar (PNG, PDF, Excel)
 
@@ -395,6 +397,35 @@ Plantillas del tooltip: `{x}`, `{series}`, `{value}`, `{unit}`, `{total}` y `{pe
 - **`interactionStart` / `interactionEnd`:** para bloquear el scroll de la pantalla mientras se arrastra el gráfico.
 - **Métodos:** `zoomTo(from, to)` (acepta fechas), `zoomBy(0.5)`, `resetZoom()`, `getZoom()`, `select(x)`, `clearInspect()`.
 - **Gestos:** pellizco y arrastre con Pointer Events y respaldo con eventos `touch*` si el navegador cancela los punteros.
+
+## Bandas de fondo
+
+Para marcar periodos detrás del gráfico: luces encendidas, riego activo, turno de noche… Una serie con `type: 'band'` se dibuja como rectángulos que ocupan todo el alto, detrás de la rejilla, las líneas y las barras.
+
+```js
+series: [
+  { name: 'LightsON', type: 'band', color: '#FFD60A', colorDark: '#FF9F0A',
+    band: { threshold: 0.5, opacity: 0.12, edge: true, hold: true, labels: ['Off', 'On'] },
+    data: { x: fechas, y: [0, 0, 1, 1, 1, 0, 0] } },
+  { name: 'Temp', unit: '°C', data: temperatura },
+],
+// Bandas fijas (sólo dibujo, sin leyenda): bands: [{ from: '2026-11-20T18:00', to: '2026-11-21T06:00', color: '#5E5CE6' }]
+```
+
+| `band` | Por defecto | Descripción |
+|---|---|---|
+| `threshold` | `0.5` | Encendida mientras el valor sea mayor que el umbral |
+| `opacity` | `0.12` | Opacidad del relleno. Varias bandas se mezclan por transparencia |
+| `edge` | `true` | Línea fina en cada transición |
+| `hold` | `true` | La lectura i cubre de su fecha a la siguiente. Con `false`, la banda empieza y termina donde la línea cruza el umbral |
+| `labels` | `['0', '1']` | Texto de apagada y encendida en tooltip, panel, leyenda y `toData` |
+
+- `y = [0, 0, 1, 1, 1, 0, 0]` da una sola banda de la 3.ª lectura a la 6.ª. `null` o `NaN` = sin banda. Si la última lectura está encendida, la banda llega hasta el final.
+- No tiene eje Y ni cuenta para la escala, el apilado, `yAxis.id` ni `zoom.minPoints`. Ocultarla no mueve la escala.
+- Leyenda: su chip va primero y la muestra u oculta. Puedes ocultar todas las líneas si queda una banda visible. En `legend.mode: 'single'` elegir otra serie no la oculta.
+- Tooltip, panel e `inspect`: el estado vigente en esa fecha (`{ series: 'LightsON', formatted: 'On', on: true, state: 'on' }`).
+- Exportar: aparece en `toImage` (también `view: 'full'`), PNG y PDF. En `toData`, Excel y CSV es una columna más, con el valor en `rows` y el texto (`On`/`Off`) en `formatted`.
+- Rendimiento: los intervalos se calculan una vez al recibir los datos; con 200.000 lecturas el arrastre sigue fluido.
 
 ## Personalizar el estilo
 

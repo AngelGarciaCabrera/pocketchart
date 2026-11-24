@@ -112,6 +112,7 @@ h2:first-child{margin-top:4px}
         <article class="card"><div id="c-stack-area"></div><p class="desc" hidden>Áreas apiladas: oculta una fuente en la leyenda y el resto se recoloca.</p></article>
         <article class="card"><div id="c-stack-pct"></div><p class="desc" hidden>Apilado al 100 %: compara el reparto, no el total.</p></article>
         <article class="card"><div id="c-axes"></div><p class="desc" hidden>Ejes Y múltiples con huecos, meta punteada y panel de valores. Toca un día: el valor queda fijo.</p></article>
+        <article class="card"><div id="c-bands"></div><p class="desc" hidden>Bandas de fondo: luces encendidas y riego detrás de las líneas. Toca su chip para ocultarlas: la escala no cambia.</p></article>
         <article class="card"><div id="c-scatter"></div><p class="desc" hidden>Toca cerca de un punto: se elige el más próximo.</p></article>
         <article class="card"><div id="c-donut"></div><p class="desc" hidden>Toca una porción o un chip para ver su valor.</p></article>
       </div>
@@ -456,6 +457,22 @@ chart.on('inspect', (sel) =&gt; console.log(sel));</pre></div>
       { name: 'pH meta', color: 'grey', dash: [5, 4], curve: 'stepline', data: fd.map((_, i) => (i < 7 ? 6 : 6.2)), yAxis: { min: 0, max: 14, show: false } },
       { name: 'EC', unit: 'µS/cm', data: fd.map((_, i) => Math.round(1800 + 500 * Math.sin(i / 3) + rnd() * 250)), yAxis: { min: 0, max: 5000, opposite: true, title: 'EC', format: 'compact' } },
       { name: 'Volumen', type: 'bar', unit: 'L', data: fd.map(() => Math.round(8 + rnd() * 6)), yAxis: { min: 0, max: 40, show: false }, fillOpacity: 0.35 },
+    ],
+  }, 'wave');
+
+  // 3f) Bandas de fondo: luces (18/6) y riego, 2 días cada 10 minutos
+  const bt0 = new Date(); bt0.setHours(0, 0, 0, 0); bt0.setDate(bt0.getDate() - 2);
+  const bx = Array.from({ length: 288 }, (_, i) => bt0.getTime() + i * 6e5);
+  const hr = (t) => new Date(t).getHours() + new Date(t).getMinutes() / 60;
+  const luz = bx.map((t) => (hr(t) >= 6 ? 1 : 0));
+  demo('#c-bands', {
+    type: 'line', animation: { enter: 'draw', duration: 800 }, title: 'Clima de la sala', subtitle: 'Luces encendidas y riego', lang: 'es',
+    x: { format: 'MM/dd HH:mm' }, tooltip: { sticky: true }, inspector: 'bottom',
+    series: [
+      { name: 'Luces', type: 'band', color: '#FFD60A', colorDark: '#FFD60A', band: { opacity: 0.14, labels: ['Apagadas', 'Encendidas'] }, data: { x: bx, y: luz } },
+      { name: 'Riego', type: 'band', color: '#0A84FF', band: { opacity: 0.16, labels: ['No', 'Sí'] }, data: { x: bx, y: bx.map((t) => { const h = hr(t); return (h >= 8 && h < 8.5) || (h >= 14 && h < 14.34) ? 1 : 0; }) } },
+      { name: 'Temp', unit: '°C', format: 'decimal1', data: { x: bx, y: luz.map((l, i) => +(21 + l * 4 + 0.6 * Math.sin(i / 9) + noise(0.25)).toFixed(1)) } },
+      { name: 'Humedad', unit: '%', format: 'integer', data: { x: bx, y: luz.map((l, i) => Math.round(68 - l * 10 + 3 * Math.cos(i / 14) + noise(1.2))) }, yAxis: { min: 0, max: 100, opposite: true, title: '%' } },
     ],
   }, 'wave');
 

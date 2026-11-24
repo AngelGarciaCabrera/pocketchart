@@ -11,14 +11,14 @@ Elige **una** de estas opciones:
 | Opción | Cuándo usarla | Qué haces |
 |---|---|---|
 | **A. Copiar el archivo** | Lo más simple. Sirve siempre. | Copia `dist/pocketchart.min.js` (o `dist/pocketchart.esm.js`) a tu proyecto. |
-| **B. CDN desde GitHub** | Webs sin herramientas de compilación. | Sube este repositorio a GitHub, crea una etiqueta `v0.8.1` y usa la URL de jsDelivr (abajo). |
+| **B. CDN desde GitHub** | Webs sin herramientas de compilación. | Sube este repositorio a GitHub, crea una etiqueta `v0.9.0` y usa la URL de jsDelivr (abajo). |
 | **C. npm desde GitHub** | Proyectos con `package.json` (React, Vue, Vite…). | `npm install github:AngelGarciaCabrera/pocketchart` |
 | **D. npm** | Cualquier proyecto con `package.json`. | `npm install pocketchart` |
 
 URL de CDN (opción B), una vez subido el repositorio y creada la etiqueta:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/AngelGarciaCabrera/pocketchart@v0.8.1/dist/pocketchart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/AngelGarciaCabrera/pocketchart@v0.9.0/dist/pocketchart.min.js"></script>
 ```
 
 > Si tu repositorio tiene otro nombre o usuario, cambia `AngelGarciaCabrera/pocketchart` en las URLs.

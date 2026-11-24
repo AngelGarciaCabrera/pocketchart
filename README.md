@@ -9,7 +9,7 @@ Ligera (~21 KB gzip), **sin dependencias**, y funciona en HTML, JavaScript, Reac
   <img alt="Licencia" src="https://img.shields.io/badge/licencia-MIT-6b7280">
 </p>
 
-**Tipos:** línea · área · barras · apiladas (también al 100 %) · dispersión · pie · donut (y combinaciones de línea y barras, con ejes Y múltiples)
+**Tipos:** línea · área · barras · apiladas (también al 100 %) · dispersión · pie · donut (y combinaciones de línea y barras, con ejes Y múltiples y bandas de fondo)
 
 **Exportar:** botón de descarga en cada gráfico con PNG, PDF y Excel (.xlsx), sin dependencias.
 
@@ -27,7 +27,7 @@ Ligera (~21 KB gzip), **sin dependencias**, y funciona en HTML, JavaScript, Reac
 ## Empezar en 30 segundos
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/AngelGarciaCabrera/pocketchart@v0.8.1/dist/pocketchart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/AngelGarciaCabrera/pocketchart@v0.9.0/dist/pocketchart.min.js"></script>
 
 <pocket-chart type="line" title="Ventas" animation="draw">
   <script type="application/json">

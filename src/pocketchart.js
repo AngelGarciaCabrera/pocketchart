@@ -1,5 +1,5 @@
 /*!
- * PocketChart v0.8.0 — gráficos mobile-first, sin dependencias.
+ * PocketChart v0.9.0 — gráficos mobile-first, sin dependencias.
  * Canvas 2D + Pointer Events. Funciona en vanilla JS, como Web Component
  * (<pocket-chart>) y dentro de cualquier framework o WebView.
  */
@@ -166,6 +166,7 @@ user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:
 .pc-chip[aria-pressed=true]{color:var(--pc-fg)}
 .pc-legend[data-single] .pc-chip[aria-pressed=true]{background:var(--pc-chip-on)}
 .pc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.pc-dot-band{border-radius:2px;width:10px}
 .pc-chip[aria-pressed=false] .pc-dot{background:transparent!important;box-shadow:inset 0 0 0 1.5px var(--pc-muted)}
 .pc-chip[aria-pressed=false]{opacity:.75}
 .pc-chip-val{font-variant-numeric:tabular-nums;color:var(--pc-fg);font-weight:600}
@@ -460,6 +461,32 @@ function nearestIndex(pts, x) {
   if (i <= 0) return 0;
   if (i >= pts.length) return pts.length - 1;
   return x - pts[i - 1].x <= pts[i].x - x ? i - 1 : i;
+}
+/** Último índice con pts[i].x <= x (-1 si no hay). */
+function holdIndex(pts, x) { const i = lowerBound(pts, x); return i < pts.length && pts[i].x === x ? i : i - 1; }
+
+/**
+ * Intervalos de una banda (`type: 'band'`), calculados una sola vez al recibir los datos.
+ * `hold`: la lectura i cubre [xᵢ, xᵢ₊₁) mientras yᵢ > umbral; sin `hold`, cruces del umbral interpolados.
+ * null/NaN corta la banda. Si la última lectura está encendida, la banda llega al final (Infinity, se recorta al dibujar).
+ * Guarda inicios y fines en Float64Array; `cut` marca los extremos que son una transición real (para el borde).
+ */
+function bandIntervals(b) {
+  const P = b.points, thr = +b.band.threshold || 0, hold = b.band.hold !== false, S = [], E = [];
+  const on = (q) => q.v != null && q.v > thr;
+  let open = null;
+  const close = (x) => { if (open == null) return; if (S.length && E[E.length - 1] >= open) E[E.length - 1] = Math.max(E[E.length - 1], x); else { S.push(open); E.push(x); } open = null; };
+  for (let i = 0; i < P.length; i++) {
+    const q = P[i], o = on(q);
+    if (hold) { if (o && open == null) open = q.x; else if (!o) close(q.x); continue; }
+    const p = i ? P[i - 1] : null;
+    if (q.v == null) { close(p ? p.x : q.x); continue; }
+    if (!p || p.v == null) { if (o) open = q.x; continue; }
+    const po = p.v > thr;
+    if (po !== o) { const xc = p.x + (q.x - p.x) * (thr - p.v) / (q.v - p.v); if (o) open = xc; else close(xc); }
+  }
+  close(Infinity);
+  b.iv = { s: Float64Array.from(S), e: Float64Array.from(E) };
 }
 
 /** Curva monótona (sin "sobrepasos" falsos como en la captura original). */
@@ -882,6 +909,11 @@ export class PocketChart {
     return out;
   }
 
+  /** Series de la tabla de datos: las normales y, al final, las bandas (con su estado en cada fila). */
+  _dataSeries(opt = {}) {
+    return opt.series === 'visible' ? [...this._visibleSeries(), ...this._visibleBands()] : [...this._series, ...(this._bands || [])];
+  }
+
   /** Tabla de datos (la misma que se exporta a Excel y CSV). */
   _dataRows(opt = {}) {
     if (this._isPie) {
@@ -889,12 +921,13 @@ export class PocketChart {
       return [[{ v: this.t.category, t: 's' }, { v: s?.name || this.t.total, t: 's' }], ...this._pie.map((p) => [{ v: p.label, t: 's' }, { v: p.value, t: 'n' }])];
     }
     // range: 'all' (por defecto) | 'visible' (sólo el rango con zoom) · series: 'all' | 'visible'
-    const sers = opt.series === 'visible' ? this._visibleSeries() : this._series;
+    const sers = this._dataSeries(opt);
     const [v0, v1] = opt.range === 'visible' ? this._view : [-Infinity, Infinity];
     const xs = new Map();
     sers.forEach((s) => s.points.forEach((q) => { if (q.x >= v0 && q.x <= v1) xs.set(q.x, true); }));
     const keys = [...xs.keys()].sort((a, b) => a - b);
-    const look = sers.map((s) => { const m = new Map(); s.points.forEach((q) => m.set(q.x, q.v)); return m; });
+    // Bandas: el estado vigente en cada fila (la última lectura <= x), no sólo en sus propias fechas.
+    const look = sers.map((s) => { if (s.band) return { get: (x) => { const p = s.points[holdIndex(s.points, x)]; return p ? p.v : null; } }; const m = new Map(); s.points.forEach((q) => m.set(q.x, q.v)); return m; });
     const xCell = (x) => this._xType === 'time' ? { v: 25569 + (x - new Date(x).getTimezoneOffset() * 6e4) / 864e5, t: 'd', raw: x }
       : this._xType === 'category' ? { v: this._cats[x] ?? String(x), t: 's' } : { v: x, t: 'n' };
     const head = [{ v: this.opts.x.label || (this._xType === 'time' ? this.t.date : this._xType === 'category' ? this.t.category : 'X'), t: 's' },
@@ -924,11 +957,11 @@ export class PocketChart {
   toData(opt = {}) {
     const t = this._dataRows(opt), head = t[0];
     const valueOf = (c) => (c == null || c.v == null ? null : c.t === 'd' ? new Date(c.raw) : c.v);
-    const sers = this._isPie ? [this._series[0]] : opt.series === 'visible' ? this._visibleSeries() : this._series;
+    const sers = this._isPie ? [this._series[0]] : this._dataSeries(opt);
     const rows = t.slice(1).map((r) => r.map(valueOf));
     const formatted = t.slice(1).map((r) => r.map((c, i) => {
       if (i === 0) return c.t === 'd' ? this._fmtXFull(c.raw) : c.t === 'n' ? this._nf(4).format(c.v) : String(c.v ?? '');
-      return c.v == null ? '' : this._fmtY(c.v, sers[i - 1] && { ...sers[i - 1], unit: '' }); // la unidad ya va en la columna
+      return c.v == null && !(sers[i - 1] && sers[i - 1].band) ? '' : this._fmtY(c.v, sers[i - 1] && { ...sers[i - 1], unit: '' }); // la unidad ya va en la columna
     }));
     return { columns: head.map((c) => String(c.v)), rows, formatted };
   }
@@ -1041,7 +1074,7 @@ export class PocketChart {
     if (this._isPie) {
       return this._pie.map((p, i) => ({ key: 'p' + i, name: p.label, color: this._color(i) }));
     }
-    return this._series.map((s) => ({ key: s.key, name: s.name, color: s.color }));
+    return [...(this._bands || []), ...this._series].map((s) => ({ key: s.key, name: s.name, color: s.color, band: !!s.band }));
   }
 
   _renderLegend() {
@@ -1051,7 +1084,7 @@ export class PocketChart {
     this.$legend.toggleAttribute('data-single', this.opts.legend.mode === 'single');
     if (!show) { this.$legend.innerHTML = ''; return; }
     this.$legend.innerHTML = items.map((it) => `<button class="pc-chip" data-key="${esc(it.key)}" aria-pressed="${!this._hidden.has(it.key)}">
-      <span class="pc-dot" style="background:${it.color}"></span><span>${esc(it.name)}</span><span class="pc-chip-val"></span></button>`).join('');
+      <span class="pc-dot${it.band ? ' pc-dot-band' : ''}" style="background:${it.color}"></span><span>${esc(it.name)}</span><span class="pc-chip-val"></span></button>`).join('');
   }
 
   /* ---------- Datos ---------- */
@@ -1129,11 +1162,16 @@ export class PocketChart {
         unit: s.unit || '',
         format: s.format || null,
         points: pts,
+        band: s.type === 'band' ? { threshold: 0.5, opacity: 0.12, edge: true, hold: true, labels: null, ...(isObj(s.band) ? s.band : {}) } : null,
       };
     });
+    // Bandas de fondo (`type: 'band'`): van aparte. No tienen eje Y, no cuentan para escalas, apilado ni zoom mínimo.
+    this._bands = this._series.filter((s) => s.band);
+    if (this._bands.length) { this._series = this._series.filter((s) => !s.band); this._bands.forEach((b) => bandIntervals(b)); }
     this._cats = cats;
     // Colores: siguen a la entidad (índice de la serie), nunca a su posición visible.
     this._series.forEach((s) => { s.color = s.color || this._color(s.slot); });
+    this._bands.forEach((s) => { s.color = s.color || this._color(s.slot); });
     // Modo "single": sólo una serie visible a la vez (útil con unidades distintas).
     if (o.legend.mode === 'single' && !this._isPie) {
       const visible = this._series.filter((s) => !this._hidden.has(s.key));
@@ -1151,6 +1189,7 @@ export class PocketChart {
       x0 = Math.min(x0, p[0].x); x1 = Math.max(x1, p[p.length - 1].x);
       for (let i = 1; i < p.length; i++) { const d = p[i].x - p[i - 1].x; if (d > 0 && d < minDx) minDx = d; }
     });
+    this._bands.forEach((s) => { const p = s.points; if (p.length) { x0 = Math.min(x0, p[0].x); x1 = Math.max(x1, p[p.length - 1].x); } });
     if (!isFinite(x0)) { x0 = 0; x1 = 1; }
     const tUnit = xType === 'time' ? 36e5 : 1; // con un solo punto en un eje de tiempo: una hora de margen
     if (!isFinite(minDx)) minDx = (x1 - x0) || tUnit;
@@ -1168,6 +1207,8 @@ export class PocketChart {
     const minPts = Math.max(2, Z.minPoints ?? 4);
     this._minSpan = Math.min(x1 - x0, Math.max((x1 - x0) / 1e5, minDx * (minPts - 1), Z.minSpan || 0));
     this._view = [x0, x1];
+    // Bandas fijas: `bands: [{ from, to, color, opacity, name }]` (sólo dibujo, sin leyenda).
+    this._sbands = (Array.isArray(o.bands) ? o.bands : []).map((b) => isObj(b) && { ...b, a: b.from == null ? -Infinity : toX(b.from, 0), b: b.to == null ? Infinity : toX(b.to, 0) }).filter((b) => b && !(b.a > b.b));
     this._zeLast = this._view.slice();
     this._dataVer = (this._dataVer || 0) + 1;
     this._catW = null; this._navKey = null;
@@ -1426,8 +1467,10 @@ export class PocketChart {
     if (this._isPie) this._pie.forEach((p) => rows.push(`<tr><th>${esc(p.label)}</th><td>${this._fmtY(p.value)}</td></tr>`));
     else {
       const ref = this._series[0]?.points || [];
-      rows.push(`<tr><th></th>${this._series.map((s) => `<th>${esc(s.name)}</th>`).join('')}</tr>`);
-      ref.slice(0, 300).forEach((p) => rows.push(`<tr><th>${esc(this._fmtXFull(p.x))}</th>${this._series.map((s) => {
+      const all = [...this._series, ...(this._bands || [])];
+      rows.push(`<tr><th></th>${all.map((s) => `<th>${esc(s.name)}</th>`).join('')}</tr>`);
+      ref.slice(0, 300).forEach((p) => rows.push(`<tr><th>${esc(this._fmtXFull(p.x))}</th>${all.map((s) => {
+        if (s.band) { const q = s.points[holdIndex(s.points, p.x)]; return `<td>${q ? esc(this._fmtY(q.v, s)) : ''}</td>`; }
         const q = s.points[nearestIndex(s.points, p.x)]; return `<td>${q && q.x === p.x ? this._fmtY(q.v, s) : ''}</td>`;
       }).join('')}</tr>`));
     }
@@ -1464,6 +1507,10 @@ export class PocketChart {
       const src = this.opts.series[s.slot] || {};
       s.color = toHex((th === 'dark' && src.colorDark) || src.color || this._color(s.slot));
     });
+    this._bands?.forEach((s) => {
+      const src = this.opts.series[s.slot] || {};
+      s.color = toHex((th === 'dark' && src.colorDark) || src.color || this._color(s.slot));
+    });
     this._renderLegend();
     this.invalidate();
   }
@@ -1473,6 +1520,7 @@ export class PocketChart {
   _nf(maxFrac) { const k = 'n' + maxFrac; return (this._nfc ||= {})[k] ||= new Intl.NumberFormat(this._locale, { maximumFractionDigits: maxFrac }); }
   _df(opts) { const k = JSON.stringify(opts); return (this._dfc ||= {})[k] ||= new Intl.DateTimeFormat(this._locale, opts); }
   _fmtY(v, s) {
+    if (s && s.band) { const L = Array.isArray(s.band.labels) ? s.band.labels : ['0', '1']; return String(L[this._bandOn(v, s) ? 1 : 0] ?? ''); }
     if (v == null) return '–';
     const own = s && s.axis && s.axis.key !== '__default';
     const yf = typeof this.opts.y.format === 'function' ? this.opts.y.format : null;
@@ -1624,10 +1672,13 @@ export class PocketChart {
   _toggleKey(key, solo) {
     const was = new Set(this._hidden);
     const items = this._legendItems().map((i) => i.key);
-    if (solo || this.opts.legend.mode === 'single') {
-      const onlyThis = items.filter((k) => k !== key);
+    const isBand = (this._bands || []).some((b) => b.key === key);
+    if ((solo || this.opts.legend.mode === 'single') && !isBand) {
+      // Las bandas no participan del modo "single" ni del "sólo esta": conservan su estado.
+      const sk = this._series.map((s) => s.key), keepB = items.filter((k) => !sk.includes(k) && this._hidden.has(k));
+      const onlyThis = sk.filter((k) => k !== key);
       const already = !solo ? false : onlyThis.every((k) => this._hidden.has(k)) && !this._hidden.has(key);
-      this._hidden = already ? new Set() : new Set(onlyThis);
+      this._hidden = new Set([...(already ? [] : onlyThis), ...keepB]);
     } else if (this._hidden.has(key)) this._hidden.delete(key);
     else if (items.filter((k) => !this._hidden.has(k)).length > 1) this._hidden.add(key);
     else return; // nunca dejar el gráfico vacío
@@ -1929,6 +1980,7 @@ export class PocketChart {
   _sy(y) { const r = this._plotRect, [a, b] = this._yCur; return r.y + r.h - (y - a) / (b - a) * r.h; }
 
   _visibleSeries() { return this._series.filter((s) => !this._hidden.has(s.key)); }
+  _visibleBands() { return (this._bands || []).filter((s) => !this._hidden.has(s.key)); }
   _refSeries() { const v = this._visibleSeries(); return v.find((s) => s.type !== 'scatter') || v[0]; }
 
   _yTarget() {
@@ -2080,6 +2132,8 @@ export class PocketChart {
     ctx.globalAlpha = 1;
     }
 
+    if (this._bands.length || this._sbands.length) this._drawBands(r, H);
+
     // Series (recortadas al área de dibujo + animación de entrada)
     const A = this._anim;
     const enterType = this._enter ? A.enter : null;
@@ -2126,17 +2180,18 @@ export class PocketChart {
     let ins = this._inspect;
     if (!ins) {
       let lx = -Infinity;
-      this._visibleSeries().forEach((s) => { for (let i = s.points.length - 1; i >= 0; i--) if (s.points[i].y != null) { if (s.points[i].x > lx) lx = s.points[i].x; break; } });
-      ins = isFinite(lx) ? this._rowsAt(lx, this._visibleSeries()) : null;
+      const vs = this._visibleSeries();
+      (vs.length ? vs : this._visibleBands()).forEach((s) => { for (let i = s.points.length - 1; i >= 0; i--) if (s.points[i].v != null) { if (s.points[i].x > lx) lx = s.points[i].x; break; } });
+      ins = isFinite(lx) ? this._rowsAt(lx, vs) : null;
     }
     const key = (ins ? ins.id : '-') + '|' + this._dataVer + '|' + [...this._hidden].join(',') + '|' + this._theme;
     if (key === this._inspKey) return;
     this._inspKey = key;
     if (!ins) { this.$insp.innerHTML = `<div class="pc-insp-h">${esc(this.t.tapHint)}</div>`; return; }
     const byKey = new Map(ins.rows.map((r) => [r.s.key, r]));
-    const rows = this._visibleSeries().map((s) => {
+    const rows = [...this._visibleSeries(), ...this._visibleBands()].map((s) => {
       const r = byKey.get(s.key);
-      return `<div class="pc-tip-r"><span class="pc-dot" style="background:${s.color}"></span><span class="pc-tip-n">${esc(s.name)}</span><span class="pc-tip-v">${esc(r ? this._fmtY(r.q.v, s) : '–')}</span></div>`;
+      return `<div class="pc-tip-r"><span class="pc-dot${s.band ? ' pc-dot-band' : ''}" style="background:${s.color}"></span><span class="pc-tip-n">${esc(s.name)}</span><span class="pc-tip-v">${esc(r ? this._fmtY(r.q.v, s) : '–')}</span></div>`;
     }).join('');
     this.$insp.innerHTML = `<div class="pc-insp-h">${esc(this._fmtXFull(ins.x))}</div><div class="pc-insp-g">${rows}</div>`;
   }
@@ -2453,6 +2508,45 @@ export class PocketChart {
     path(rad); ctx.fillStyle = color; ctx.fill();
   }
 
+  /** Bandas de fondo: detrás de la rejilla, las líneas y las barras ('destination-over'), recortadas al área de dibujo. */
+  _drawBands(r, H) {
+    const ctx = this.ctx, [v0, v1] = this._view, k = r.w / (v1 - v0), X0 = r.x, X1 = r.x + r.w;
+    const sx = (x) => (x === -Infinity ? X0 - 2 : x === Infinity ? X1 + 2 : X0 + (x - v0) * k);
+    const enter = this._enter ? this._p(0) : 1;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(X0, r.y, r.w, r.h); ctx.clip();
+    ctx.globalCompositeOperation = 'destination-over';
+    const fill = (a, b, color, op, edge, ea, eb) => {
+      const xa = Math.max(X0 - 2, sx(a)), xb = Math.min(X1 + 2, sx(b));
+      if (xb <= xa) return;
+      if (edge) {
+        ctx.fillStyle = this._alpha(color, Math.min(0.7, op * 3) * enter);
+        if (ea && xa >= X0 - 1) ctx.fillRect(Math.round(xa), r.y, 1, r.h);
+        if (eb && xb <= X1 + 1) ctx.fillRect(Math.round(xb) - 1, r.y, 1, r.h);
+      }
+      ctx.fillStyle = this._alpha(color, op * enter);
+      ctx.fillRect(xa, r.y, xb - xa, r.h);
+    };
+    const dark = this._theme === 'dark';
+    this._sbands.forEach((b) => fill(b.a, b.b, toHex((dark && b.colorDark) || b.color || '#FFD60A'), b.opacity ?? 0.12, !!b.edge, true, true));
+    this._bands.forEach((b) => {
+      if (this._hidden.has(b.key)) return;
+      const S = b.iv.s, E = b.iv.e, n = S.length, op = +b.band.opacity || 0.12, x00 = b.points.length ? b.points[0].x : -Infinity;
+      // Primer intervalo que termina dentro de la vista (búsqueda binaria)
+      let lo = 0, hi = n;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (E[m] < v0) lo = m + 1; else hi = m; }
+      // Intervalos que caen en el mismo píxel se unen: con 200.000 lecturas se dibujan como mucho ~ancho/2 rectángulos.
+      let ca = null, cb = null;
+      for (let i = lo; i < n && S[i] <= v1; i++) {
+        if (ca != null && sx(S[i]) - sx(cb) < 1) { cb = E[i]; continue; }
+        if (ca != null) fill(ca, cb, b.color, op, b.band.edge, ca > x00, cb !== Infinity);
+        ca = S[i]; cb = E[i];
+      }
+      if (ca != null) fill(ca, cb, b.color, op, b.band.edge, ca > x00, cb !== Infinity);
+    });
+    ctx.restore();
+  }
+
   _alpha(hex, a) {
     const m = /^#?([0-9a-f]{6})$/i.exec(toHex(String(hex)).trim());
     if (!m) return hex;
@@ -2466,8 +2560,8 @@ export class PocketChart {
     const r = this._plotRect; if (!r) return null;
     if (px < r.x - 20 || px > r.x + r.w + 20 || py > r.y + r.h + 24) return null;
     const vis = this._visibleSeries();
-    const ref = this._refSeries(); if (!ref) return null;
-    if (vis.every((s) => s.type === 'scatter')) {
+    const ref = this._refSeries() || this._visibleBands()[0]; if (!ref) return null;
+    if (vis.length && vis.every((s) => s.type === 'scatter')) {
       let best = null, bd = 44 * 44;
       vis.forEach((s) => (this._multi && this._useAxis(s.axis), s).points.forEach((q) => {
         if (q.y == null || q.x < this._view[0] || q.x > this._view[1]) return;
@@ -2495,7 +2589,7 @@ export class PocketChart {
   _hitAtX(tx) {
     const vis = this._visibleSeries();
     let x = null, bd = Infinity;
-    vis.forEach((s) => { const j = nearestIndex(s.points, tx); if (j < 0) return; const d = Math.abs(s.points[j].x - tx); if (d < bd) { bd = d; x = s.points[j].x; } });
+    (vis.length ? vis : this._visibleBands()).forEach((s) => { const j = nearestIndex(s.points, tx); if (j < 0) return; const d = Math.abs(s.points[j].x - tx); if (d < bd) { bd = d; x = s.points[j].x; } });
     return x == null ? null : this._rowsAt(x, vis);
   }
 
@@ -2505,6 +2599,11 @@ export class PocketChart {
       const tol = Math.max(this._minDx, Math.min(s._dx || this._minDx, (this._view[1] - this._view[0]) / 4)) / 2;
       return q && Math.abs(q.x - x) <= tol + 1e-9 ? { s, q } : null;
     }).filter(Boolean);
+    // Bandas: el estado vigente en x (la última lectura <= x). `y: null` → sin punto en el gráfico.
+    this._visibleBands().forEach((s) => {
+      const p = s.points[holdIndex(s.points, x)];
+      if (p) rows.push({ s, q: { x: p.x, v: p.v, y: null, raw: p.raw, i: p.i } });
+    });
     return { id: 'x' + x, x, rows };
   }
 
@@ -2518,7 +2617,7 @@ export class PocketChart {
   _applyInspect(hit, py, touch) {
     const changed = !this._inspect || this._inspect.id !== hit.id;
     this._inspect = { ...hit, py, touch };
-    if (changed) { if (touch) navigator.vibrate?.(3); this._emit('inspect', { x: hit.x, label: this._fmtXFull(hit.x), points: hit.rows.map((r) => ({ series: r.s.name, id: r.s.key, x: r.q.x, y: r.q.v, data: r.q.raw, color: r.s.color, formatted: this._fmtY(r.q.v, r.s), ...(this._multi ? { unit: r.s.unit, yAxis: { id: r.s.yAxisOpt && r.s.yAxisOpt.id != null ? r.s.yAxisOpt.id : null, min: r.s.axis.cur ? r.s.axis.cur[0] : r.s.axis.min, max: r.s.axis.cur ? r.s.axis.cur[1] : r.s.axis.max, opposite: r.s.axis.opposite } } : {}) })) }); }
+    if (changed) { if (touch) navigator.vibrate?.(3); this._emit('inspect', { x: hit.x, label: this._fmtXFull(hit.x), points: hit.rows.map((r) => ({ series: r.s.name, id: r.s.key, x: r.q.x, y: r.q.v, data: r.q.raw, color: r.s.color, formatted: this._fmtY(r.q.v, r.s), ...(r.s.band ? { type: 'band', on: this._bandOn(r.q.v, r.s), state: this._bandOn(r.q.v, r.s) ? 'on' : 'off' } : this._multi ? { unit: r.s.unit, yAxis: { id: r.s.yAxisOpt && r.s.yAxisOpt.id != null ? r.s.yAxisOpt.id : null, min: r.s.axis.cur ? r.s.axis.cur[0] : r.s.axis.min, max: r.s.axis.cur ? r.s.axis.cur[1] : r.s.axis.max, opposite: r.s.axis.opposite } } : {}) })) }); }
     this.invalidate();
   }
 
@@ -2570,7 +2669,7 @@ export class PocketChart {
 
   /** Valores de una selección para plantillas: total, porcentaje y textos ya formateados. */
   _tipVars(ins) {
-    const rows = ins.rows.filter((r) => r.q.v != null);
+    const rows = ins.rows.filter((r) => r.q.v != null && !r.s.band);
     const st = rows.filter((r) => r.s.stackKey);
     const grp = st.length > 1 ? st : rows;
     const total = grp.reduce((n, r) => n + r.q.v, 0);
@@ -2578,6 +2677,12 @@ export class PocketChart {
     const totalTxt = ref ? this._fmtY(total, { ...ref, unit: '' }) : '';
     return { total, totalTxt, unit: ref ? ref.unit : '', x: this._fmtXFull(ins.x), sumAbs: grp.reduce((n, r) => n + Math.abs(r.q.v), 0) };
   }
+  /** Orden del tooltip: con series apiladas, la capa de arriba primero; las bandas, al final. */
+  _tipOrder(ins) {
+    const sr = ins.rows.filter((r) => !r.s.band), br = ins.rows.filter((r) => r.s.band);
+    return [...(!ins.scatter && this._stacked && sr.length && sr.every((r) => r.s.stackKey) ? sr.reverse() : sr), ...br];
+  }
+  _bandOn(v, s) { return v != null && v > (+s.band.threshold || 0); }
   _fill(tpl, vars) { return String(tpl).replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : '')); }
 
   _tipHtml(ins) {
@@ -2587,8 +2692,8 @@ export class PocketChart {
     if (f) return f({ x: ins.x, label: this._fmtXFull(ins.x), points: ins.rows.map((r) => ({ series: r.s.name, color: r.s.color, x: r.q.x, y: r.q.v, data: r.q.raw, share: r.s.stackKey && this._pct ? r.q.y - (r.q.below ? r.q.below.y : 0) : undefined })) });
     const head = ins.scatter ? `${esc(ins.rows[0].s.name)}` : esc(this._fmtXFull(ins.x));
     // Con series apiladas, el orden del tooltip sigue al dibujo: la capa de arriba, primero.
-    const list = !ins.scatter && this._stacked && ins.rows.every((r) => r.s.stackKey) ? ins.rows.slice().reverse() : ins.rows;
-    const rows = list.map(({ s, q }) => `<div class="pc-tip-r"><span class="pc-dot" style="background:${s.color}"></span><span class="pc-tip-n">${esc(ins.scatter ? (q.label ?? `x ${this._nf(2).format(q.x)}`) : s.name)}</span><span class="pc-tip-v">${esc(this._fmtY(q.v, s))}${s.stackKey && this._pct && q.v != null ? ` <span class="pc-tip-n">· ${this._nf(1).format(q.y - (q.below ? q.below.y : 0))} %</span>` : ''}</span></div>`).join('');
+    const list = this._tipOrder(ins);
+    const rows = list.map(({ s, q }) => `<div class="pc-tip-r"><span class="pc-dot${s.band ? ' pc-dot-band' : ''}" style="background:${s.color}"></span><span class="pc-tip-n">${esc(ins.scatter ? (q.label ?? `x ${this._nf(2).format(q.x)}`) : s.name)}</span><span class="pc-tip-v">${esc(this._fmtY(q.v, s))}${s.stackKey && this._pct && q.v != null ? ` <span class="pc-tip-n">· ${this._nf(1).format(q.y - (q.below ? q.below.y : 0))} %</span>` : ''}</span></div>`).join('');
     // Total de las series apiladas en ese punto
     const st = ins.scatter ? [] : ins.rows.filter((r) => r.s.stackKey && r.q.v != null);
     const total = st.length > 1 ? `<div class="pc-tip-r pc-tip-t"><span class="pc-tip-n">${esc(this.t.total)}</span><span class="pc-tip-v">${esc(this._fmtY(st.reduce((n, r) => n + r.q.v, 0), st[0].s))}</span></div>` : '';
@@ -2599,10 +2704,10 @@ export class PocketChart {
   _tipTemplate(ins, T) {
     const V = this._tipVars(ins);
     const head = T.header ? this._fill(T.header, { x: V.x, total: V.totalTxt, unit: V.unit }) : ins.scatter ? ins.rows[0].s.name : V.x;
-    const list = !ins.scatter && this._stacked && ins.rows.every((r) => r.s.stackKey) ? ins.rows.slice().reverse() : ins.rows;
+    const list = this._tipOrder(ins);
     const tpl = T.template || '{series}|{value} {unit}';
     const rows = list.map(({ s, q }) => {
-      const vars = { x: V.x, series: s.name, value: q.v == null ? '–' : this._fmtY(q.v, { ...s, unit: '' }), unit: q.v == null ? '' : s.unit, total: V.totalTxt,
+      const vars = { x: V.x, series: s.name, value: q.v == null && !s.band ? '–' : this._fmtY(q.v, { ...s, unit: '' }), unit: q.v == null || s.band ? '' : s.unit, total: V.totalTxt,
         percent: q.v == null || !V.sumAbs ? '' : this._nf(1).format(Math.abs(q.v) / V.sumAbs * 100) + '%' };
       const txt = this._fill(tpl, vars).replace(/\s+$/, '');
       const cut = txt.indexOf('|'); // "nombre|valor" separa en dos columnas
