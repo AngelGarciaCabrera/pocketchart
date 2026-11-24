@@ -34,7 +34,7 @@ const EVENTS = ['inspect', 'zoom', 'zoomEnd', 'toggle', 'ready', 'updated', 'err
 
 const html = (bg, gap) => `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<style>html,body{margin:0;padding:0;background:${bg};-webkit-user-select:none;user-select:none}.pc-item+.pc-item{margin-top:${gap}px}</style></head>
+<style>html,body{margin:0;padding:0;overflow:hidden;background:${bg};-webkit-user-select:none;user-select:none}.pc-item+.pc-item{margin-top:${gap}px}</style></head>
 <body><div id="root"></div>
 <script>${LIB}</script>
 <script>

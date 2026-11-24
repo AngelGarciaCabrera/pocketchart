@@ -133,7 +133,7 @@ const CSS = `
 --pc-shadow:0 4px 18px rgba(16,18,24,.10),0 1px 2px rgba(16,18,24,.06);--pc-radius:var(--pocket-radius,0px);
 --pc-font:var(--pocket-font,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif);
 ${PALETTE.light.map((c, i) => `--pc-c${i + 1}:var(--pocket-c${i + 1},${c});`).join('')}
-position:relative;display:block;box-sizing:border-box;background:var(--pc-bg);color:var(--pc-fg);font-family:var(--pc-font);
+position:relative;display:block;overflow-x:clip;box-sizing:border-box;background:var(--pc-bg);color:var(--pc-fg);font-family:var(--pc-font);
 font-size:14px;line-height:1.35;-webkit-tap-highlight-color:transparent;border-radius:var(--pc-radius);-webkit-font-smoothing:antialiased}
 .pc-root[data-pc-theme=dark]{--pc-bg:var(--pocket-bg-dark,#15171b);--pc-fg:var(--pocket-fg-dark,#ecedef);--pc-muted:var(--pocket-muted-dark,#9aa0aa);
 --pc-grid:var(--pocket-grid-dark,rgba(236,237,239,.07));--pc-axis:var(--pocket-axis-dark,rgba(236,237,239,.2));
@@ -202,7 +202,7 @@ padding:5px 10px;border-radius:8px;white-space:nowrap;pointer-events:none;opacit
 padding:max(12px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left))}
 .pc-root.pc-fs .pc-plot{flex:1;height:auto!important;min-height:0}
 @media (orientation:portrait){.pc-root.pc-fs .pc-rotate{display:block}}
-.pc-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.pc-sr{position:absolute;left:0;top:0;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;pointer-events:none}
 @media (prefers-reduced-motion:reduce){.pc-tip,.pc-hint,.pc-chip,.pc-btn{transition:none}}
 .pc-plot canvas,.pc-nav canvas{touch-action:inherit}
 `;
@@ -1029,7 +1029,7 @@ export class PocketChart {
       <div class="pc-range" hidden><span class="pc-range-t"></span><button class="pc-btn" data-act="reset"></button></div>
       <div class="pc-nav" hidden><canvas aria-hidden="true"></canvas></div>
       <div class="pc-rotate"></div>
-      <table class="pc-sr"></table>`;
+      <div class="pc-sr"><table></table></div>`;
     this.el.appendChild(r);
     this.root = r;
     this.$titles = r.querySelector('.pc-titles');
@@ -1045,7 +1045,7 @@ export class PocketChart {
     this.$insp = r.querySelector('.pc-insp');
     this.$range = r.querySelector('.pc-range');
     this.$rangeT = r.querySelector('.pc-range-t');
-    this.$table = r.querySelector('.pc-sr');
+    this.$table = r.querySelector('.pc-sr table'); // la tabla va dentro de un div: un <table> ignora width y overflow y ensancha la página
     this.ctx = this.$canvas.getContext('2d');
     this.navCtx = this.$navCanvas.getContext('2d');
   }

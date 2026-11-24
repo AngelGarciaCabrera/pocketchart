@@ -3,6 +3,9 @@
 ## 0.9.0 — 2026-11-24
 - Bandas de fondo: series `type: 'band'` (`band: { threshold, opacity, edge, hold, labels }`) y bandas fijas `bands: [{ from, to, color }]`. Detrás de la rejilla y las series, sin eje Y, siguen al zoom y al pan, con chip en la leyenda, estado en tooltip, panel, `inspect`, `toImage` y `toData`/Excel.
 - Sin bandas, el gráfico se ve igual que en 0.8.1.
+- La tabla oculta para lectores de pantalla (`.pc-sr`) va dentro de un `div`: antes, como `<table>`, ignoraba el ancho de 1 px y ensanchaba la página (scroll horizontal en la WebView).
+- El gráfico ya no sobresale 6 px a la derecha (`overflow-x: clip` en `.pc-root`).
+- React Native: `html, body { overflow: hidden }` en la WebView. Ya no hace falta una copia local del wrapper.
 
 ## 0.8.1 — 2026-11-23
 - Listo para npm: `npm install pocketchart`. Funciona con `import` y con `require` (`dist/pocketchart.cjs`).
